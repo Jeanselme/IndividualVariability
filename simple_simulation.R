@@ -99,8 +99,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, beta, tau, covariat
 
     # Fit MELSM - Correctly specified
     formula <- bf(
-      outcomes ~ zAge + zBase + (1|corr|id),
-      sigma ~ zAge + zBase + (1|corr|id), 
+      outcomes ~ zAge + zBase + (1|C|id),
+      sigma ~ zAge + zBase + (1|C|id), 
       family = gaussian()
     )
 
@@ -108,8 +108,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, beta, tau, covariat
       formula,
       data,
       seed = i,
-      warmup = 500,
-      iter = 1000,
+      warmup = 1000,
+      iter = 2000,
       chains = 4, 
       cores = 4
     )
@@ -118,39 +118,21 @@ simulation <- function(n_sim, n_individuals, n_points, corr, beta, tau, covariat
 
     # Fit MELSM - Incorrectly specified
     formula <- bf(
-      outcomes ~ zAge + zBase + (1|corr|id),
+      outcomes ~ zAge + zBase + (1|id),
       sigma ~ zAge + zBase, 
       family = gaussian()
     )
 
-    fit_incorr <- brm(
-      formula,
-      data,
-      seed = i,
-      warmup = 500,
-      iter = 1000,
-      chains = 4, 
-      cores = 4
-    )
-
+    fit_incorr <- update(fit, formula. = formula, newdata = data, seed = i)
     evaluation$melsm_incorr <- summarise(evaluation$melsm_incorr, evaluate(fit_incorr, beta, tau, corr, random_effects, outcomes), n_sim)
 
     # Fit MM - Correctly specified
     formula <- bf(
-      outcomes ~  zAge + zBase + (1|corr|id),
+      outcomes ~  zAge + zBase + (1|id),
       family = gaussian()
     )
 
-    fit_mm <- brm(
-      formula,
-      data,
-      seed = i,
-      warmup = 500,
-      iter = 1000,
-      chains = 4, 
-      cores = 4
-    )
-
+    fit_mm <- update(fit, formula. = formula, newdata = data, seed = i)
     evaluation$mm <- summarise(evaluation$mm, evaluate(fit_mm, beta, tau, corr, random_effects, outcomes), n_sim)
   }
   return(evaluation)
@@ -169,7 +151,7 @@ n_sim <- 10
 n_individuals_list <- c(100, 200, 300)
 for (n_individuals in n_individuals_list) {
   print(paste("Simulating for", n_individuals, "individuals"))
-  write.table(simulation(n_sim, n_individuals, n_points, corr, beta, tau, covariate_mean, covariate_cov), paste("ind", n_individuals, ".txt"), sep = "\t", quote = FALSE)
+  write.table(simulation(n_sim, n_individuals, n_points, corr, beta, tau, covariate_mean, covariate_cov), paste("ind", n_individuals, ".csv"), sep = ",", quote = FALSE)
 }
 
 # Simulation study: Impact of number of points
@@ -177,5 +159,5 @@ n_individuals <- 200
 n_points_list <- c(5, 15, 25)
 for (n_points in n_points_list) {
   print(paste("Simulating for", n_points, "points"))
-  write.table(simulation(n_sim, n_individuals, n_points, corr, beta, tau, covariate_mean, covariate_cov), paste("points", n_points, ".txt"), sep = "\t", quote = FALSE)
+  write.table(simulation(n_sim, n_individuals, n_points, corr, beta, tau, covariate_mean, covariate_cov), paste("points", n_points, ".csv"), sep = ",", quote = FALSE)
 }
