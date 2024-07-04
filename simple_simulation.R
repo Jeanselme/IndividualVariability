@@ -266,3 +266,14 @@ if ((run == -1) or (run == 3)) {
     list.save(sim, file = paste0("results/corr", corr_exp, '.json'))
   }
 }
+
+beta <- c(1, 0.5, 0., 0.)
+tau <- c(0.8, 0.5, 0., 0.)
+if ((run == -1) or (run == 4)) {
+  n_points_list <- c(5, 10, 20)
+  for (n_points_exp in n_points_list) {
+    print(paste("Simulating for", n_points_exp, "points"))
+    sim = simulation(n_sim, n_individuals, n_points_exp, corr, columns, beta, tau, covariate_mean, covariate_cov)
+    list.save(sim, file = paste0("results/overlap_points", n_points_exp, '.json'))
+  }
+}
