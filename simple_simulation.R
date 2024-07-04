@@ -1,5 +1,8 @@
 library(brms)
 library(MASS)
+library(rstan)
+library(rlist)
+library(survival)
 
 # Generative functions
 ## Sampling function
@@ -44,15 +47,38 @@ rmse <- function(x) {
   sqrt(mean(x^2))
 }
 
+error_coeff <- function(fit, columns, beta, prefix = 'b_') {
+  abs_diffs <- list()
+  in_bounds <- list()
+  for (i in seq_along(beta)) {
+    col <- columns[i]
+    tryCatch({
+      summary_stats <- posterior_summary(fit, variable = paste0(prefix, col))
+      estimate <- summary_stats[, 'Estimate']
+      lower_bound <- summary_stats[, 'Q2.5']
+      upper_bound <- summary_stats[, 'Q97.5']
+      
+      abs_diffs[[col]] <- abs(beta[i] - estimate)
+      in_bounds[[col]] <- beta[i] >= lower_bound & beta[i] <= upper_bound
+
+    }, error = function(e) {})
+  }
+  return(list(error=unlist(abs_diffs), coverage=unlist(in_bounds)))
+}
+
 ## Function evaluate (silent if error as some methods do not compute all)
-evaluate <- function(fit, beta, tau, corr, random_effects, outcomes) {
-  errors <- list()
+evaluate <- function(fit, columns, beta, tau, corr, random_effects, outcomes) {
+  errors <- list(time = sum(rstan::get_elapsed_time(fit$fit)))
 
   # RMSE beta
-  errors$beta <- abs(beta - posterior_summary(fit, pars='b_z')[, 'Estimate'])
+  beta_estimate = error_coeff(fit, columns, beta)
+  errors$beta <- beta_estimate$error
+  errors$beta_coverage <- beta_estimate$coverage
 
   # RMSE tau
-  try(errors$tau  <- abs(tau - posterior_summary(fit, pars='b_sigma_z')[, 'Estimate']), silent = TRUE)
+  tau_estimate = error_coeff(fit, columns, tau, 'b_sigma_')
+  errors$tau <- tau_estimate$error
+  errors$tau_coverage <- tau_estimate$coverage
 
   # RMSE corr
   try(errors$corr <- abs(corr - posterior_summary(fit, variable='cor_id__Intercept__sigma_Intercept')[, 'Estimate']), silent = TRUE)
@@ -67,14 +93,27 @@ evaluate <- function(fit, beta, tau, corr, random_effects, outcomes) {
   return(errors)
 }
 
-## Summarise function to average across simulations
-summarise <- function(previous, evaluation, n_sim) {
+## Append function to average across simulations
+append <- function(previous, evaluation) {
   errors <- list()
   for (quantity in names(evaluation)) {
     if (!quantity %in% names(previous)) {
-      previous[[quantity]] <- 0
+      previous[[quantity]] <- c()
     }
-    errors[[quantity]] <- previous[[quantity]] + (evaluation[[quantity]] / n_sim)
+    errors[[quantity]] <- rbind(previous[[quantity]], evaluation[[quantity]])
+  }
+  return(errors)
+}
+
+summarise <- function(evaluation) {
+  errors <- list()
+  for (model in names(evaluation)) {
+    errors[[model]] <- list()
+    for (quantity in names(evaluation[[model]]))
+      errors[[model]][[quantity]] <- list(
+        value=mean(evaluation[[model]][[quantity]]),
+        std=sd(evaluation[[model]][[quantity]], na.rm = TRUE)
+      )
   }
   return(errors)
 }
@@ -82,8 +121,10 @@ summarise <- function(previous, evaluation, n_sim) {
 
 # Simulation studies
 ## Full loop train and evaluation
-simulation <- function(n_sim, n_individuals, n_points, corr, beta, tau, covariate_mean, covariate_cov) {
-  evaluation = list(melsm = list(), melsm_incorr = list(), mm = list())
+simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov) {
+  evaluation = list(melsm = list(), melsm_incorr_sigma = list(), 
+                    melsm_incorr_out = list(), melsm_incorr_sigmainter = list(), 
+                    melsm_all = list(), mm = list(), mmall = list())
   for (i in 1:n_sim) {
 
     # Fix seed
@@ -99,65 +140,116 @@ simulation <- function(n_sim, n_individuals, n_points, corr, beta, tau, covariat
 
     # Fit MELSM - Correctly specified
     formula <- bf(
-      outcomes ~ zAge + zBase + (1|C|id),
-      sigma ~ zAge + zBase + (1|C|id), 
+      outcomes ~ age + albumin + (1|C|id),
+      sigma ~ trig + platelet + (1|C|id), 
       family = gaussian()
     )
 
-    fit <- brm(
-      formula,
-      data,
-      seed = i,
-      warmup = 1000,
-      iter = 2000,
-      chains = 4, 
-      cores = 4
-    )
+    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm <- append(evaluation$melsm, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes))
 
-    evaluation$melsm <- summarise(evaluation$melsm, evaluate(fit, beta, tau, corr, random_effects, outcomes), n_sim)
-
-    # Fit MELSM - Incorrectly specified
+    # Fit MELSM - Incorrectly specified sigma
     formula <- bf(
-      outcomes ~ zAge + zBase + (1|id),
-      sigma ~ zAge + zBase, 
+      outcomes ~ age + albumin + (1|C|id),
+      sigma ~ age + albumin + (1|C|id), 
       family = gaussian()
     )
 
-    fit_incorr <- update(fit, formula. = formula, newdata = data, seed = i)
-    evaluation$melsm_incorr <- summarise(evaluation$melsm_incorr, evaluate(fit_incorr, beta, tau, corr, random_effects, outcomes), n_sim)
+    fit_incorr <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm_incorr_sigma <- append(evaluation$melsm_incorr_sigma, evaluate(fit_incorr, columns, beta, tau, corr, random_effects, outcomes))
 
-    # Fit MM - Correctly specified
+    # Fit MELSM - Incorrectly specified outcome
     formula <- bf(
-      outcomes ~  zAge + zBase + (1|id),
+      outcomes ~ trig + platelet + (1|C|id),
+      sigma ~ trig + platelet + (1|C|id), 
       family = gaussian()
     )
 
-    fit_mm <- update(fit, formula. = formula, newdata = data, seed = i)
-    evaluation$mm <- summarise(evaluation$mm, evaluate(fit_mm, beta, tau, corr, random_effects, outcomes), n_sim)
+    fit_incorr <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm_incorr_out <- append(evaluation$melsm_incorr_out, evaluate(fit_incorr, columns, beta, tau, corr, random_effects, outcomes))
+
+    # Fit MELSM - ALL
+    formula <- bf(
+      outcomes ~ . + (1|C|id),
+      sigma ~ . + (1|C|id), 
+      family = gaussian()
+    )
+
+    fit_all <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm_all <- append(evaluation$melsm_all, evaluate(fit_all, columns, beta, tau, corr, random_effects, outcomes))
+
+
+    # Fit MELSM - No sigma intercept
+    formula <- bf(
+      outcomes ~ age + albumin + (1|C|id),
+      sigma ~ trig + platelet, 
+      family = gaussian()
+    )
+
+    fit_nointer <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm_incorr_sigmainter <- append(evaluation$melsm_incorr_sigmainter, evaluate(fit_nointer, columns, beta, tau, corr, random_effects, outcomes))
+
+
+    # Fit MM
+    formula <- bf(
+      outcomes ~ age + albumin + (1|id),
+      family = gaussian()
+    )
+
+    fit_mm <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$mm <- append(evaluation$mm, evaluate(fit_mm, columns, beta, tau, corr, random_effects, outcomes))
+
+    # Fit MM all
+    formula <- bf(
+      outcomes ~ . + (1|id),
+      family = gaussian()
+    )
+
+    fit_mmall <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$mmall <- append(evaluation$mmall, evaluate(fit_mmall, columns, beta, tau, corr, random_effects, outcomes))
   }
-  return(evaluation)
+  return(summarise(evaluation))
 }
 
-# Shared parameters
-covariate_mean <- colMeans(epilepsy[c("zAge", "zBase")])
-covariate_cov <- cor(epilepsy[c("zAge", "zBase")])
-beta <- c(1, 0.1)
-tau <- c(0, -0.5)
+# Default parameters
+## Data
+columns <- c("age", "albumin", "trig", "platelet")
+covariate_mean <- colMeans(pbc[columns], na.rm = TRUE)
+covariate_cov <- cor(pbc[columns], use="complete.obs")
+
+## True model (CANNOT CHANGE 0 without changing experiment)
+beta <- c(1, 0.5, 0., 0.)
+tau <- c(0., 0, 0.8, 0.5)
 corr <- 0
-n_points <- 5
-n_sim <- 10
+
+## Population
+n_individuals <- 200
+n_points <- 15
+
+## Simulation
+n_sim <- 25
+
 
 # Simulation study: Impact of number of individuals
 n_individuals_list <- c(100, 200, 300)
-for (n_individuals in n_individuals_list) {
-  print(paste("Simulating for", n_individuals, "individuals"))
-  write.table(simulation(n_sim, n_individuals, n_points, corr, beta, tau, covariate_mean, covariate_cov), paste("ind", n_individuals, ".csv"), sep = ",", quote = FALSE)
+for (n_individuals_exp in n_individuals_list) {
+  print(paste("Simulating for", n_individuals_exp, "individuals"))
+  sim = simulation(n_sim, n_individuals_exp, n_points, corr, beta, tau, covariate_mean, covariate_cov)
+  list.save(sim, file = paste0("results/individuals", n_individuals_exp, '.json'))
 }
 
 # Simulation study: Impact of number of points
-n_individuals <- 200
 n_points_list <- c(5, 15, 25)
-for (n_points in n_points_list) {
-  print(paste("Simulating for", n_points, "points"))
-  write.table(simulation(n_sim, n_individuals, n_points, corr, beta, tau, covariate_mean, covariate_cov), paste("points", n_points, ".csv"), sep = ",", quote = FALSE)
+for (n_points_exp in n_points_list) {
+  print(paste("Simulating for", n_points_exp, "points"))
+  sim = simulation(n_sim, n_individuals, n_points_exp, corr, beta, tau, covariate_mean, covariate_cov)
+  list.save(sim, file = paste0("results/points", n_points_exp, '.json'))
+}
+
+# Simulation study: Impact of number of corr
+rho_list <- c(-0.5, -0.25, 0.25, 0.5)
+for (corr_exp in rho_list) {
+  print(paste("Simulating for", corr_exp, "correlation"))
+  sim = simulation(n_sim, n_individuals, n_points, corr_exp, columns, beta, tau, covariate_mean, covariate_cov)
+  list.save(sim, file = paste0("results/corr", corr_exp, '.json'))
 }
