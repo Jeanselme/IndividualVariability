@@ -227,7 +227,7 @@ n_individuals <- 200
 n_points <- 15
 
 ## Simulation
-n_sim <- 2
+n_sim <- 10
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args)==0) {
@@ -238,7 +238,7 @@ if (length(args)==0) {
 }
 
 # Simulation study: Impact of number of individuals
-if ((run == -1) or (run == 1)) {
+if ((run == -1)|(run == 1)) {
   n_individuals_list <- c(100, 200, 300)
   for (n_individuals_exp in n_individuals_list) {
     print(paste("Simulating for", n_individuals_exp, "individuals"))
@@ -248,7 +248,7 @@ if ((run == -1) or (run == 1)) {
 }
 
 # Simulation study: Impact of number of points
-if ((run == -1) or (run == 2)) {
+if ((run == -1)|(run == 2)) {
   n_points_list <- c(5, 10, 20)
   for (n_points_exp in n_points_list) {
     print(paste("Simulating for", n_points_exp, "points"))
@@ -258,7 +258,7 @@ if ((run == -1) or (run == 2)) {
 }
 
 # Simulation study: Impact of number of corr
-if ((run == -1) or (run == 3)) {
+if ((run == -1)|(run == 3)) {
   rho_list <- c(-0.5, -0.25, 0.25, 0.5)
   for (corr_exp in rho_list) {
     print(paste("Simulating for", corr_exp, "correlation"))
@@ -269,7 +269,7 @@ if ((run == -1) or (run == 3)) {
 
 beta <- c(1, 0.5, 0., 0.)
 tau <- c(0.8, 0.5, 0., 0.)
-if ((run == -1) or (run == 4)) {
+if ((run == -1)|(run == 4)) {
   n_points_list <- c(5, 10, 20)
   for (n_points_exp in n_points_list) {
     print(paste("Simulating for", n_points_exp, "points"))
