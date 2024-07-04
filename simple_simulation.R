@@ -227,29 +227,42 @@ n_individuals <- 200
 n_points <- 15
 
 ## Simulation
-n_sim <- 25
+n_sim <- 2
 
+args <- commandArgs(trailingOnly = TRUE)
+if (length(args)==0) {
+  print('Run all')
+  run <- -1
+} else {
+  run <- as.numeric(args[1])
+}
 
 # Simulation study: Impact of number of individuals
-n_individuals_list <- c(100, 200, 300)
-for (n_individuals_exp in n_individuals_list) {
-  print(paste("Simulating for", n_individuals_exp, "individuals"))
-  sim = simulation(n_sim, n_individuals_exp, n_points, corr, beta, tau, covariate_mean, covariate_cov)
-  list.save(sim, file = paste0("results/individuals", n_individuals_exp, '.json'))
+if ((run == -1) or (run == 1)) {
+  n_individuals_list <- c(100, 200, 300)
+  for (n_individuals_exp in n_individuals_list) {
+    print(paste("Simulating for", n_individuals_exp, "individuals"))
+    sim = simulation(n_sim, n_individuals_exp, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov)
+    list.save(sim, file = paste0("results/individuals", n_individuals_exp, '.json'))
+  }
 }
 
 # Simulation study: Impact of number of points
-n_points_list <- c(5, 15, 25)
-for (n_points_exp in n_points_list) {
-  print(paste("Simulating for", n_points_exp, "points"))
-  sim = simulation(n_sim, n_individuals, n_points_exp, corr, beta, tau, covariate_mean, covariate_cov)
-  list.save(sim, file = paste0("results/points", n_points_exp, '.json'))
+if ((run == -1) or (run == 2)) {
+  n_points_list <- c(5, 10, 20)
+  for (n_points_exp in n_points_list) {
+    print(paste("Simulating for", n_points_exp, "points"))
+    sim = simulation(n_sim, n_individuals, n_points_exp, corr, columns, beta, tau, covariate_mean, covariate_cov)
+    list.save(sim, file = paste0("results/points", n_points_exp, '.json'))
+  }
 }
 
 # Simulation study: Impact of number of corr
-rho_list <- c(-0.5, -0.25, 0.25, 0.5)
-for (corr_exp in rho_list) {
-  print(paste("Simulating for", corr_exp, "correlation"))
-  sim = simulation(n_sim, n_individuals, n_points, corr_exp, columns, beta, tau, covariate_mean, covariate_cov)
-  list.save(sim, file = paste0("results/corr", corr_exp, '.json'))
+if ((run == -1) or (run == 3)) {
+  rho_list <- c(-0.5, -0.25, 0.25, 0.5)
+  for (corr_exp in rho_list) {
+    print(paste("Simulating for", corr_exp, "correlation"))
+    sim = simulation(n_sim, n_individuals, n_points, corr_exp, columns, beta, tau, covariate_mean, covariate_cov)
+    list.save(sim, file = paste0("results/corr", corr_exp, '.json'))
+  }
 }
