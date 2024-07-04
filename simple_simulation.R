@@ -3,6 +3,7 @@ library(MASS)
 library(rstan)
 library(rlist)
 library(survival)
+rstan_options(auto_write = TRUE)
 
 # Generative functions
 ## Sampling function
