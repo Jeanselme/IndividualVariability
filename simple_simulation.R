@@ -3,7 +3,6 @@ library(MASS)
 library(rstan)
 library(rlist)
 library(survival)
-rstan_options(auto_write = TRUE)
 
 # Generative functions
 ## Sampling function
@@ -171,8 +170,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
 
     # Fit MELSM - ALL
     formula <- bf(
-      outcomes ~ . + (1|C|id),
-      sigma ~ . + (1|C|id), 
+      outcomes ~ age + albumin + trig + platelet + (1|C|id),
+      sigma ~ age + albumin + trig + platelet + (1|C|id), 
       family = gaussian()
     )
 
@@ -202,7 +201,7 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
 
     # Fit MM all
     formula <- bf(
-      outcomes ~ . + (1|id),
+      outcomes ~ age + albumin + trig + platelet + (1|id),
       family = gaussian()
     )
 
