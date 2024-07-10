@@ -214,8 +214,9 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
 # Default parameters
 ## Data
 columns <- c("age", "albumin", "trig", "platelet")
-covariate_mean <- colMeans(pbc[columns], na.rm = TRUE)
-covariate_cov <- cor(pbc[columns], use="complete.obs")
+pbc_norm <- scale(pbc[columns])
+covariate_mean <- colMeans(pbc_norm, na.rm = TRUE)
+covariate_cov <- cov(pbc_norm, use="complete.obs")
 
 ## True model (CANNOT CHANGE 0 without changing experiment)
 beta <- c(1, 0.5, 0., 0.)
