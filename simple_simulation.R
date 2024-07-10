@@ -155,8 +155,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
       family = gaussian()
     )
 
-    fit_incorr <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_incorr_sigma <- append(evaluation$melsm_incorr_sigma, evaluate(fit_incorr, columns, beta, tau, corr, random_effects, outcomes))
+    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm_incorr_sigma <- append(evaluation$melsm_incorr_sigma, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes))
 
     # Fit MELSM - Incorrectly specified outcome
     formula <- bf(
@@ -165,8 +165,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
       family = gaussian()
     )
 
-    fit_incorr <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_incorr_out <- append(evaluation$melsm_incorr_out, evaluate(fit_incorr, columns, beta, tau, corr, random_effects, outcomes))
+    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm_incorr_out <- append(evaluation$melsm_incorr_out, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes))
 
     # Fit MELSM - ALL
     formula <- bf(
@@ -175,8 +175,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
       family = gaussian()
     )
 
-    fit_all <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_all <- append(evaluation$melsm_all, evaluate(fit_all, columns, beta, tau, corr, random_effects, outcomes))
+    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm_all <- append(evaluation$melsm_all, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes))
 
 
     # Fit MELSM - No sigma intercept
@@ -186,8 +186,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
       family = gaussian()
     )
 
-    fit_nointer <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_incorr_sigmainter <- append(evaluation$melsm_incorr_sigmainter, evaluate(fit_nointer, columns, beta, tau, corr, random_effects, outcomes))
+    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$melsm_incorr_sigmainter <- append(evaluation$melsm_incorr_sigmainter, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes))
 
 
     # Fit MM
@@ -196,8 +196,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
       family = gaussian()
     )
 
-    fit_mm <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$mm <- append(evaluation$mm, evaluate(fit_mm, columns, beta, tau, corr, random_effects, outcomes))
+    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$mm <- append(evaluation$mm, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes))
 
     # Fit MM all
     formula <- bf(
@@ -205,8 +205,8 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
       family = gaussian()
     )
 
-    fit_mmall <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$mmall <- append(evaluation$mmall, evaluate(fit_mmall, columns, beta, tau, corr, random_effects, outcomes))
+    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+    evaluation$mmall <- append(evaluation$mmall, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes))
   }
   return(summarise(evaluation))
 }
