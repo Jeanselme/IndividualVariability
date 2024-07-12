@@ -1,6 +1,6 @@
 library(brms)
 library(MASS)
-library(GMCM)
+library(matrixStats)
 library(rstan)
 library(rlist)
 library(survival)
