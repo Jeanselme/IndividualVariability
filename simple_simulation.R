@@ -1,5 +1,6 @@
 library(brms)
 library(MASS)
+library(GMCM)
 library(rstan)
 library(rlist)
 library(survival)
@@ -59,7 +60,7 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
       upper_bound <- summary_stats[, 'Q97.5']
       
       abs_diffs[[col]] <- abs(beta[i] - estimate)
-      in_bounds[[col]] <- beta[i] >= lower_bound & beta[i] <= upper_bound
+      in_bounds[[col]] <- as.numeric(beta[i] >= lower_bound & beta[i] <= upper_bound)
 
     }, error = function(e) {})
   }
@@ -111,8 +112,8 @@ summarise <- function(evaluation) {
     errors[[model]] <- list()
     for (quantity in names(evaluation[[model]]))
       errors[[model]][[quantity]] <- list(
-        value=mean(evaluation[[model]][[quantity]]),
-        std=sd(evaluation[[model]][[quantity]], na.rm = TRUE)
+        value=colMeans(evaluation[[model]][[quantity]]),
+        std=colSds(evaluation[[model]][[quantity]], na.rm = TRUE)
       )
   }
   return(errors)
