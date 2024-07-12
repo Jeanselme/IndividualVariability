@@ -87,9 +87,11 @@ evaluate <- function(fit, columns, beta, tau, corr, random_effects, outcomes) {
   # RMSE random effects
   try(errors$re_intercept <- rmse(random_effects[, 1] - posterior_summary(fit, variable='r_id')[, 'Estimate']), silent = TRUE)
   try(errors$re_sigma <- rmse(random_effects[, 2] - posterior_summary(fit, variable='r_id__sigma')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_intercept <- abs(1 - posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_sigma <- abs(1 - posterior_summary(fit, variable='sd_id__sigma_Intercept')[, 'Estimate']), silent = TRUE)
 
   # RMSE outcomes
-  errors$outcomes <- rmse(fitted(fit)[, 'Estimate'] - outcomes)
+  errors$outcomes <- rmse(predict(fit)[, 'Estimate'] - outcomes)
 
   return(errors)
 }
@@ -182,7 +184,7 @@ simulation <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau,
 
     # Fit MELSM - No sigma intercept
     formula <- bf(
-      outcomes ~ age + albumin + (1|C|id),
+      outcomes ~ age + albumin + (1|id),
       sigma ~ trig + platelet, 
       family = gaussian()
     )
