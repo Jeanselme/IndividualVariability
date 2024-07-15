@@ -62,7 +62,7 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
       abs_diffs[[col]] <- abs(beta[i] - estimate)
       in_bounds[[col]] <- as.numeric(beta[i] >= lower_bound & beta[i] <= upper_bound)
 
-    }, error = function(e) {})
+    }, error = function(e) {abs_diffs[[col]] <- NA; in_bounds[[col]] <- NA})
   }
   return(list(error=unlist(abs_diffs), coverage=unlist(in_bounds)))
 }
