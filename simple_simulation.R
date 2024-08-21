@@ -165,6 +165,7 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     # Load the file
     evaluation = list.load(json)
     print("File loaded successfully.")
+    print(paste("Already", evaluation$start, "simulations done."))
   } else {
     # Initialise evaluation
     evaluation = list(start = 1)
@@ -193,19 +194,13 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
 
     # Fit models
     for (method in names(formulas)) {
-      print(method)
-      fit <- brm(formulas[[method]], data, seed = i, warmup = 1, iter = 2, chains = 1, cores = 1)
-      print("DONE")
-      evaluation[[names[method]]] <- append(evaluation[[names[method]]], evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-      print("APPENDED")
+      fit <- brm(formulas[[method]], data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+      evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
     }
-    print("END")
     
     # Save
     evaluation$start = evaluation$start + 1
-    print("SAVING")
     list.save(evaluation, file = json)
-    print("BROKE")
     list.save(summarise_perf(evaluation), file = paste0(path, '_summary.json'))
   }
 }
@@ -260,7 +255,7 @@ if ((run == -1)|(run == 1)) {
   n_individuals_list <- c(100, 200, 300)
   for (n_individuals_exp in n_individuals_list) {
     print(paste("Simulating for", n_individuals_exp, "individuals"))
-    path = paste0("results/individuals", n_individuals_exp, '.json')
+    path = paste0("results/individuals", n_individuals_exp)
     simulation(path, formulas, n_sim, n_individuals_exp, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
   }
 }
@@ -270,7 +265,7 @@ if ((run == -1)|(run == 2)) {
   n_points_list <- c(5, 10, 20)
   for (n_points_exp in n_points_list) {
     print(paste("Simulating for", n_points_exp, "points"))
-    path = paste0("results/points", n_points_exp, '.json')
+    path = paste0("results/points", n_points_exp)
     simulation(path, formulas, n_sim, n_individuals, n_points_exp, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
   }
 }
@@ -280,7 +275,7 @@ if ((run == -1)|(run == 3)) {
   rho_list <- c(-0.5, -0.25, 0.25, 0.5)
   for (corr_exp in rho_list) {
     print(paste("Simulating for", corr_exp, "correlation"))
-    path = paste0("results/corr", corr_exp, '.json')
+    path = paste0("results/corr", corr_exp)
     simulation(path, formulas, n_sim, n_individuals, n_points, corr_exp, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
   }
 }
