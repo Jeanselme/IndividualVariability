@@ -74,7 +74,7 @@ outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, t
 # Compute error for each model
 ## Function rmse
 rerr <- function(truth, estimate) {
-  if (truth != 0) {
+  if (mean(truth) != 0) {
     return(mean(abs((truth - estimate) / truth)))
   } else {
     return(mean(abs(truth - estimate)))
@@ -145,7 +145,7 @@ append <- function(previous, evaluation) {
   return(errors)
 }
 
-summarise <- function(evaluation) {
+summarise_perf <- function(evaluation) {
   errors <- list()
   for (model in names(evaluation)) {
     errors[[model]] <- list()
@@ -158,14 +158,23 @@ summarise <- function(evaluation) {
   return(errors)
 }
 
-# Simulation studies
-## Full loop train and evaluation
-simulation_mm <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov) {
-  evaluation = list(melsm = list(), melsm_incorr_sigma = list(), 
-                    melsm_incorr_out = list(), melsm_incorr_sigmainter = list(), 
-                    melsm_all = list(), mm = list(), mmall = list())
-  for (i in 1:n_sim) {
+# Create simulation study
+simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE) {
+  json = paste0(path, '.json')
+  if (file.exists(json)) {
+    # Load the file
+    evaluation = list.load(json)
+    print("File loaded successfully.")
+  } else {
+    # Initialise evaluation
+    evaluation = list(start = 1)
+    for (name in names(formulas)) {
+      evaluation[[name]] = list()
 
+    }
+    print("File does not exist.")
+  }  
+  for (i in evaluation$start:n_sim) {
     # Fix seed
     set.seed(i)
 
@@ -173,7 +182,7 @@ simulation_mm <- function(n_sim, n_individuals, n_points, corr, columns, beta, t
     sample_times <- sampling_func(n_individuals, n_points)
     covariates <- covariates_func(sample_times, covariate_mean, time_dependent, covariate_cov)
     random_effects <- random_effects_func(n_individuals, corr_effects = corr)
-    outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau)
+    outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, time_slope)
 
     last_time_indices <- sample_times %>%
       group_by(id) %>%
@@ -182,150 +191,23 @@ simulation_mm <- function(n_sim, n_individuals, n_points, corr, columns, beta, t
 
     data <- data.frame(sample_times, covariates, outcomes = outcomes)
 
-    # Fit MELSM - Correctly specified
-    formula <- bf(
-      outcomes ~ age + albumin + (1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm <- append(evaluation$melsm, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-
-    # Fit MM
-    formula <- bf(
-      outcomes ~ age + albumin + (1|id),
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$mm <- append(evaluation$mm, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
+    # Fit models
+    for (method in names(formulas)) {
+      print(method)
+      fit <- brm(formulas[[method]], data, seed = i, warmup = 1, iter = 2, chains = 1, cores = 1)
+      print("DONE")
+      evaluation[[names[method]]] <- append(evaluation[[names[method]]], evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
+      print("APPENDED")
+    }
+    print("END")
+    
+    # Save
+    evaluation$start = evaluation$start + 1
+    print("SAVING")
+    list.save(evaluation, file = json)
+    print("BROKE")
+    list.save(summarise_perf(evaluation), file = paste0(path, '_summary.json'))
   }
-  return(summarise(evaluation))
-}
-
-simulation_melsm <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov) {
-  evaluation = list(melsm = list(), melsm_incorr_sigma = list(), 
-                    melsm_incorr_out = list(), melsm_incorr_sigmainter = list(), 
-                    melsm_all = list(), mm = list(), mmall = list())
-  for (i in 1:n_sim) {
-
-    # Fix seed
-    set.seed(i)
-
-    # Generate data
-    sample_times <- sampling_func(n_individuals, n_points)
-    covariates <- covariates_func(sample_times, covariate_mean, time_dependent, covariate_cov)
-    random_effects <- random_effects_func(n_individuals, corr_effects = corr)
-    outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau)
-
-    last_time_indices <- sample_times %>%
-      group_by(id) %>%
-      summarize(index_last = (time == max(time)))
-    last_time_indices <- last_time_indices$index_last
-
-    data <- data.frame(sample_times, covariates, outcomes = outcomes)
-
-    # Fit MELSM - Correctly specified
-    formula <- bf(
-      outcomes ~ age + albumin + (1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm <- append(evaluation$melsm, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-
-    # Fit MELSM - Incorrectly specified sigma
-    formula <- bf(
-      outcomes ~ age + albumin + (1|C|id),
-      sigma ~ age + albumin + (1|C|id), 
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_incorr_sigma <- append(evaluation$melsm_incorr_sigma, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-
-    # Fit MELSM - Incorrectly specified outcome
-    formula <- bf(
-      outcomes ~ trig + platelet + (1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_incorr_out <- append(evaluation$melsm_incorr_out, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-
-    # Fit MELSM - ALL
-    formula <- bf(
-      outcomes ~ age + albumin + trig + platelet + (1|C|id),
-      sigma ~ age + albumin + trig + platelet + (1|C|id), 
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_all <- append(evaluation$melsm_all, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-
-
-    # Fit MELSM - No sigma intercept
-    formula <- bf(
-      outcomes ~ age + albumin + (1|id),
-      sigma ~ trig + platelet, 
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_incorr_sigmainter <- append(evaluation$melsm_incorr_sigmainter, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$mm <- append(evaluation$mm, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-  }
-  return(summarise(evaluation))
-}
-
-simulation_time <- function(n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov) {
-  evaluation = list(melsm = list(), melsm_incorr_sigma = list(), 
-                    melsm_incorr_out = list(), melsm_incorr_sigmainter = list(), 
-                    melsm_all = list(), mm = list(), mmall = list())
-  for (i in 1:n_sim) {
-
-    # Fix seed
-    set.seed(i)
-
-    # Generate data
-    sample_times <- sampling_func(n_individuals, n_points)
-    covariates <- covariates_func(sample_times, covariate_mean, time_dependent, covariate_cov)
-    random_effects <- random_effects_func(n_individuals, corr_effects = corr)
-    outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, TRUE)
-
-    last_time_indices <- sample_times %>%
-      group_by(id) %>%
-      summarize(index_last = (time == max(time)))
-    last_time_indices <- last_time_indices$index_last
-
-    data <- data.frame(sample_times, covariates, outcomes = outcomes)
-
-    # Fit MELSM - Correctly specified
-    formula <- bf(
-      outcomes ~ age + albumin + (time|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm <- append(evaluation$melsm, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-
-    # Fit MELSM - Incorrectly specified 
-    formula <- bf(
-      outcomes ~ age + albumin + (1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
-      family = gaussian()
-    )
-
-    fit <- brm(formula, data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-    evaluation$melsm_incorr_sigma <- append(evaluation$melsm_incorr_sigma, evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
-  }
-  return(summarise(evaluation))
 }
 
 
@@ -357,13 +239,29 @@ if (length(args)==0) {
   run <- as.numeric(args[1])
 }
 
+
+# STUDY 1 
+### Formula for MM comparison
+formulas = list(
+    melsm = bf(
+      outcomes ~ age + albumin + (1|C|id),
+      sigma ~ trig + platelet + (1|C|id), 
+      family = gaussian()
+    ),
+    mm = bf(
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ 1,
+      family = gaussian()
+    )
+  )
+
 # Simulation study: Impact of number of individuals
 if ((run == -1)|(run == 1)) {
   n_individuals_list <- c(100, 200, 300)
   for (n_individuals_exp in n_individuals_list) {
     print(paste("Simulating for", n_individuals_exp, "individuals"))
-    sim = simulation_mm(n_sim, n_individuals_exp, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
-    list.save(sim, file = paste0("results/individuals", n_individuals_exp, '.json'))
+    path = paste0("results/individuals", n_individuals_exp, '.json')
+    simulation(path, formulas, n_sim, n_individuals_exp, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
   }
 }
 
@@ -372,8 +270,8 @@ if ((run == -1)|(run == 2)) {
   n_points_list <- c(5, 10, 20)
   for (n_points_exp in n_points_list) {
     print(paste("Simulating for", n_points_exp, "points"))
-    sim = simulation_mm(n_sim, n_individuals, n_points_exp, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
-    list.save(sim, file = paste0("results/points", n_points_exp, '.json'))
+    path = paste0("results/points", n_points_exp, '.json')
+    simulation(path, formulas, n_sim, n_individuals, n_points_exp, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
   }
 }
 
@@ -382,19 +280,65 @@ if ((run == -1)|(run == 3)) {
   rho_list <- c(-0.5, -0.25, 0.25, 0.5)
   for (corr_exp in rho_list) {
     print(paste("Simulating for", corr_exp, "correlation"))
-    sim = simulation_mm(n_sim, n_individuals, n_points, corr_exp, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
-    list.save(sim, file = paste0("results/corr", corr_exp, '.json'))
+    path = paste0("results/corr", corr_exp, '.json')
+    simulation(path, formulas, n_sim, n_individuals, n_points, corr_exp, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
   }
 }
 
+
+# STUDY 2
+### Formula for MELSM comparison
+formulas = list(
+    correct = bf(
+      outcomes ~ age + albumin + (1|C|id),
+      sigma ~ trig + platelet + (1|C|id), 
+      family = gaussian()
+    ),
+    sigma = bf(
+      outcomes ~ age + albumin + (1|C|id),
+      sigma ~ age + albumin + (1|C|id), 
+      family = gaussian()
+    ),
+    outcomes = bf(
+      outcomes ~ trig + platelet + (1|C|id),
+      sigma ~ trig + platelet + (1|C|id), 
+      family = gaussian()
+    ),
+    all = bf(
+      outcomes ~ age + albumin + trig + platelet + (1|C|id),
+      sigma ~ age + albumin + trig + platelet + (1|C|id), 
+      family = gaussian()
+    ),
+    nore = bf(
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ trig + platelet, 
+      family = gaussian()
+    )
+  )
+
 if ((run == -1)|(run == 4)) {
   print(paste("Simulating for MELSM misspecification"))
-  sim = simulation_melsm(n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
-  list.save(sim, file = paste0("results/misspecification", n_points_exp, '.json'))
+  path = paste0("results/misspecification.json")
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
 }
+
+# STUDY 3
+### Formula for time comparison
+formulas = list(
+    melsm = bf(
+      outcomes ~ age + albumin + (time + 1|C|id),
+      sigma ~ trig + platelet + (1|C|id), 
+      family = gaussian()
+    ),
+    melsm_notime = bf(
+      outcomes ~ age + albumin + (1|C|id),
+      sigma ~ trig + platelet + (1|C|id), 
+      family = gaussian()
+    )
+  )
 
 if ((run == -1)|(run == 5)) {
   print(paste("Simulating for time dependent random effects"))
-  sim = simulation_time(n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
-  list.save(sim, file = paste0("results/time", n_points_exp, '.json'))
+  path = paste0("results/time.json")
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, TRUE)
 }
