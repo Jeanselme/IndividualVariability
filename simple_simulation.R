@@ -313,7 +313,7 @@ formulas = list(
 
 if ((run == -1)|(run == 4)) {
   print(paste("Simulating for MELSM misspecification"))
-  path = paste0("results/misspecification.json")
+  path = paste0("results/misspecification")
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
 }
 
@@ -334,6 +334,6 @@ formulas = list(
 
 if ((run == -1)|(run == 5)) {
   print(paste("Simulating for time dependent random effects"))
-  path = paste0("results/time.json")
+  path = paste0("results/time")
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, TRUE)
 }
