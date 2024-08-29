@@ -5,6 +5,7 @@ library(rstan)
 library(rlist)
 library(survival)
 library(dplyr)
+library(ggplot2)
 
 # Generative functions
 ## Sampling function
@@ -36,11 +37,26 @@ covariates_func <- function(sampling, mean, time_dependent, sigma) {
   return(covariates)
 }
 
+age_diff_func <- function(sample_times, covariates) {
+  sample_times <- as.data.frame(sample_times)
+  covariates <- as.data.frame(covariates)
+
+  combined_data <- bind_cols(sample_times, covariates) %>%
+    group_by(id) %>%
+    mutate(time = age - first(age)) %>%
+    select(id, time)  # Select only the id and time columns
+  
+  return(combined_data)
+}
+
 ## Random effects function (normally distributed) 
-random_effects_func <- function(n_individuals, sd1 = 1, sd2 = 1, corr_effects = 0) { 
+random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects = 0) { 
   # Create covariance for the random effects
-  cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd2, sd2^2), nrow = 2)
-  random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0), Sigma = cov_matrix)
+  sd1 <- sds[1]
+  sd2 <- sds[2]
+  sd3 <- sds[3]
+  cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd3, corr_effects*sd1*sd2, sd2^2, corr_effects*sd2*sd3, corr_effects*sd1*sd3, corr_effects*sd2*sd3, sd3^2), nrow = 3)
+  random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0, 0), Sigma = cov_matrix)
   return(random_effects)
 }
 
@@ -57,7 +73,7 @@ random_effects_func_non_normal <- function(n_individuals, sd1 = 1, sd2 = 1, corr
 outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, time_slope = FALSE) { 
   # Random noise with the random effect
   if (time_slope) {
-    omega <- exp(covariates %*% tau + sample_times$time * random_effects[sample_times$id, 2])
+    omega <- exp(covariates %*% tau  + random_effects[sample_times$id, 2] + sample_times$time * random_effects[sample_times$id, 3])
   } else {
     omega <- exp(covariates %*% tau + random_effects[sample_times$id, 2])
   }
@@ -103,32 +119,39 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
 }
 
 ## Function evaluate (silent if error as some methods do not compute all)
-evaluate <- function(fit, columns, beta, tau, corr, random_effects, outcomes, indices) {
+evaluate <- function(fit, newdata, columns, beta, tau, sds, corr, random_effects, indices) {
   errors <- list(time = sum(rstan::get_elapsed_time(fit$fit)))
 
   # RMSE beta
   beta_estimate = error_coeff(fit, columns, beta)
-  errors$beta <- beta_estimate$error
-  errors$beta_relative <- beta_estimate$relative
-  errors$beta_coverage <- beta_estimate$coverage
+  errors$beta_out <- beta_estimate$error
+  errors$beta_out_relative <- beta_estimate$relative
+  errors$beta_out_coverage <- beta_estimate$coverage
 
   # RMSE tau
   tau_estimate = error_coeff(fit, columns, tau, 'b_sigma_')
-  errors$tau <- tau_estimate$error
-  errors$tau_relative <- tau_estimate$relative
-  errors$tau_coverage <- tau_estimate$coverage
+  errors$beta_omega <- tau_estimate$error
+  errors$beta_omega_relative <- tau_estimate$relative
+  errors$beta_omega_coverage <- tau_estimate$coverage
 
   # RMSE corr
   try(errors$corr <- rerr(corr, posterior_summary(fit, variable='cor_id__Intercept__sigma_Intercept')[, 'Estimate']), silent = TRUE)
 
   # RMSE random effects
-  try(errors$re_intercept <- rerr(random_effects[, 1],  posterior_summary(fit, variable='r_id')[, 'Estimate']), silent = TRUE)
-  try(errors$re_sigma <- rerr(random_effects[, 2], posterior_summary(fit, variable='r_id__sigma')[, 'Estimate']), silent = TRUE)
-  try(errors$sd_re_intercept <- rerr(1, posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
-  try(errors$sd_re_sigma <- rerr(1, posterior_summary(fit, variable='sd_id__sigma_Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$re_out <- rerr(random_effects[, 1],  posterior_summary(fit, variable='r_id')[, 'Estimate']), silent = TRUE)
+  try(errors$re_omega_0 <- rerr(random_effects[, 2], posterior_summary(fit, pars='r_id__sigma.*Intercept.*')[, 'Estimate']), silent = TRUE)
+  try(errors$re_omega_1 <- rerr(random_effects[, 3], posterior_summary(fit, pars='r_id__sigma.*time.*')[, 'Estimate']), silent = TRUE)
+
+  sd1 <- sds[1]
+  sd2 <- sds[2]
+  sd3 <- sds[3]
+  try(errors$sd_re_out <- rerr(sd1, posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_0 <- rerr(sd2, posterior_summary(fit, variable='sd_id__sigma_Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_1 <- rerr(sd3, posterior_summary(fit, variable='sd_id__sigma_time')[, 'Estimate']), silent = TRUE)
 
   # RMSE outcomes
-  errors$outcomes <- rerr(predict(fit)[, 'Estimate'][indices], outcomes[indices])
+  errors$last <- rerr(predict(fit, newdata = newdata[indices,])[, 'Estimate'], newdata$outcomes[indices])
+  errors$average <- rerr(predict(fit)[, 'Estimate'], newdata$outcomes[!indices])
 
   return(errors)
 }
@@ -158,8 +181,29 @@ summarise_perf <- function(evaluation) {
   return(errors)
 }
 
+spaghetti_plot <- function(data, num_ids = 5) {
+  # Randomly select a few unique ids
+  selected_ids <- sample(unique(data$id), num_ids)
+  
+  # Filter data to include only the selected ids
+  filtered_data <- data %>%
+    filter(id %in% selected_ids)
+  
+  # Create the spaghetti plot
+  p <- ggplot(filtered_data, aes(x = time, y = outcomes, group = id, color = as.factor(id))) +
+    geom_line() +
+    geom_point() +
+    labs(title = "Spaghetti Plot of Outcomes Over Time",
+         x = "Time",
+         y = "Outcome",
+         color = "ID") +
+    theme_minimal()
+
+  ggsave('test.png', plot = p, width = 8, height = 6)
+}
+
 # Create simulation study
-simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE) {
+simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5)) {
   json = paste0(path, '.json')
   if (file.exists(json)) {
     # Load the file
@@ -180,9 +224,10 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     set.seed(i)
 
     # Generate data
-    sample_times <- sampling_func(n_individuals, n_points)
+    sample_times <- sampling_func(n_individuals, n_points + 1) # Add one point for evaluation
     covariates <- covariates_func(sample_times, covariate_mean, time_dependent, covariate_cov)
-    random_effects <- random_effects_func(n_individuals, corr_effects = corr)
+    sample_times <- age_diff_func(sample_times, covariates) # Update times to respect age difference
+    random_effects <- random_effects_func(n_individuals, sds, corr_effects = corr)
     outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, time_slope)
 
     last_time_indices <- sample_times %>%
@@ -191,11 +236,12 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     last_time_indices <- last_time_indices$index_last
 
     data <- data.frame(sample_times, covariates, outcomes = outcomes)
+    # spaghetti_plot(data, 10)
 
     # Fit models
     for (method in names(formulas)) {
-      fit <- brm(formulas[[method]], data, seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-      evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, columns, beta, tau, corr, random_effects, outcomes, last_time_indices))
+      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1, iter = 2, chains = 4, cores = 4, normalize = TRUE)
+      evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, data, columns, beta, tau, sds, corr, random_effects, last_time_indices))
     }
     
     # Save
@@ -215,8 +261,8 @@ covariate_mean <- colMeans(pbc_scale, na.rm = TRUE)
 covariate_cov <- cov(pbc_scale, use="complete.obs")
 
 ## True model (CANNOT CHANGE 0 without changing experiment)
-beta <- c(1, 0.5, 0., 0.)
-tau <- c(0., 0, 0.8, 0.5)
+beta <- c(0.5, 0.25, 0., 0.)
+tau <- c(0., 0, -0.4, 0.25)
 corr <- 0
 
 ## Population
@@ -239,8 +285,8 @@ if (length(args)==0) {
 ### Formula for MM comparison
 formulas = list(
     melsm = bf(
-      outcomes ~ age + albumin + (1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ trig + platelet + (1|id), 
       family = gaussian()
     ),
     mm = bf(
@@ -270,48 +316,53 @@ if ((run == -1)|(run == 2)) {
   }
 }
 
-# Simulation study: Impact of number of corr
-if ((run == -1)|(run == 3)) {
-  rho_list <- c(-0.5, -0.25, 0.25, 0.5)
-  for (corr_exp in rho_list) {
-    print(paste("Simulating for", corr_exp, "correlation"))
-    path = paste0("results/corr", corr_exp)
-    simulation(path, formulas, n_sim, n_individuals, n_points, corr_exp, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
-  }
-}
+# # Simulation study: Impact of number of corr
+# if ((run == -1)|(run == 3)) {
+#   rho_list <- c(-0.5, -0.25, 0.25, 0.5)
+#   for (corr_exp in rho_list) {
+#     print(paste("Simulating for", corr_exp, "correlation"))
+#     path = paste0("results/corr", corr_exp)
+#     simulation(path, formulas, n_sim, n_individuals, n_points, corr_exp, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
+#   }
+# }
 
 
 # STUDY 2
 ### Formula for MELSM comparison
 formulas = list(
     correct = bf(
-      outcomes ~ age + albumin + (1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ trig + platelet + (1|id), 
       family = gaussian()
     ),
     sigma = bf(
-      outcomes ~ age + albumin + (1|C|id),
-      sigma ~ age + albumin + (1|C|id), 
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ age + albumin + (1|id), 
       family = gaussian()
     ),
     outcomes = bf(
-      outcomes ~ trig + platelet + (1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
+      outcomes ~ trig + platelet + (1|id),
+      sigma ~ trig + platelet + (1|id), 
       family = gaussian()
     ),
     all = bf(
-      outcomes ~ age + albumin + trig + platelet + (1|C|id),
-      sigma ~ age + albumin + trig + platelet + (1|C|id), 
+      outcomes ~ age + albumin + trig + platelet + (1|id),
+      sigma ~ age + albumin + trig + platelet + (1|id), 
       family = gaussian()
     ),
     nore = bf(
       outcomes ~ age + albumin + (1|id),
       sigma ~ trig + platelet, 
       family = gaussian()
+    ),
+    mm = bf(
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ 1,
+      family = gaussian()
     )
   )
 
-if ((run == -1)|(run == 4)) {
+if ((run == -1)|(run == 3)) {
   print(paste("Simulating for MELSM misspecification"))
   path = paste0("results/misspecification")
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
@@ -321,13 +372,34 @@ if ((run == -1)|(run == 4)) {
 ### Formula for time comparison
 formulas = list(
     melsm = bf(
-      outcomes ~ age + albumin + (time + 1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ trig + platelet + (1 + time|id), 
       family = gaussian()
     ),
     melsm_notime = bf(
-      outcomes ~ age + albumin + (1|C|id),
-      sigma ~ trig + platelet + (1|C|id), 
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ trig + platelet + (1|id), 
+      family = gaussian()
+    )
+  )
+
+if ((run == -1)|(run == 4)) {
+  print(paste("Simulating for time dependent random effects"))
+  path = paste0("results/time")
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, TRUE)
+}
+
+# STUDY 4
+### Random effect family
+formulas = list(
+    uniform = bf(
+      outcomes ~ age + albumin + (time + 1|id),
+      sigma ~ trig + platelet + (1|id), 
+      family = uniform()
+    ),
+    gaussian = bf(
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ trig + platelet + (1|id), 
       family = gaussian()
     )
   )
