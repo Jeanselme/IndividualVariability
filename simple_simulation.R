@@ -150,8 +150,8 @@ evaluate <- function(fit, newdata, columns, beta, tau, sds, corr, random_effects
   try(errors$sd_re_omega_1 <- rerr(sd3, posterior_summary(fit, variable='sd_id__sigma_time')[, 'Estimate']), silent = TRUE)
 
   # RMSE outcomes
-  errors$last <- rerr(predict(fit, newdata = newdata[indices,])[, 'Estimate'], newdata$outcomes[indices])
-  errors$average <- rerr(predict(fit)[, 'Estimate'], newdata$outcomes[!indices])
+  errors$last <- rerr(fitted(fit, newdata = newdata[indices,])[, 'Estimate'], newdata$outcomes[indices])
+  errors$average <- rerr(fitted(fit)[, 'Estimate'], newdata$outcomes[!indices])
 
   return(errors)
 }
@@ -240,7 +240,7 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
 
     # Fit models
     for (method in names(formulas)) {
-      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1, iter = 2, chains = 4, cores = 4, normalize = TRUE)
+      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
       evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, data, columns, beta, tau, sds, corr, random_effects, last_time_indices))
     }
     
@@ -261,8 +261,8 @@ covariate_mean <- colMeans(pbc_scale, na.rm = TRUE)
 covariate_cov <- cov(pbc_scale, use="complete.obs")
 
 ## True model (CANNOT CHANGE 0 without changing experiment)
-beta <- c(0.5, 0.25, 0., 0.)
-tau <- c(0., 0, -0.4, 0.25)
+beta <- c(1, 0.5, 0., 0.)
+tau <- c(0., 0, 0.8, 0.5)
 corr <- 0
 
 ## Population
