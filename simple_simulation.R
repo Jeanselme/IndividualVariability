@@ -50,13 +50,17 @@ age_diff_func <- function(sample_times, covariates) {
 }
 
 ## Random effects function (normally distributed) 
-random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects = 0) { 
+random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects = 0, student = FALSE) { 
   # Create covariance for the random effects
   sd1 <- sds[1]
   sd2 <- sds[2]
   sd3 <- sds[3]
   cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd3, corr_effects*sd1*sd2, sd2^2, corr_effects*sd2*sd3, corr_effects*sd1*sd3, corr_effects*sd2*sd3, sd3^2), nrow = 3)
-  random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0, 0), Sigma = cov_matrix)
+  if (student) {
+    random_effects <- rmvt(n = n_individuals, sigma = cov_matrix, df = 15)
+  } else {
+    random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0, 0), Sigma = cov_matrix)
+  }
   return(random_effects)
 }
 
@@ -203,7 +207,7 @@ spaghetti_plot <- function(data, num_ids = 5) {
 }
 
 # Create simulation study
-simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5)) {
+simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5), student = FALSE) {
   json = paste0(path, '.json')
   if (file.exists(json)) {
     # Load the file
@@ -227,7 +231,7 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     sample_times <- sampling_func(n_individuals, n_points + 1) # Add one point for evaluation
     covariates <- covariates_func(sample_times, covariate_mean, time_dependent, covariate_cov)
     sample_times <- age_diff_func(sample_times, covariates) # Update times to respect age difference
-    random_effects <- random_effects_func(n_individuals, sds, corr_effects = corr)
+    random_effects <- random_effects_func(n_individuals, sds, corr_effects = corr, student = student)
     outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, time_slope)
 
     last_time_indices <- sample_times %>%
@@ -392,10 +396,10 @@ if ((run == -1)|(run == 4)) {
 # STUDY 4
 ### Random effect family
 formulas = list(
-    uniform = bf(
-      outcomes ~ age + albumin + (time + 1|id),
-      sigma ~ trig + platelet + (1|id), 
-      family = uniform()
+    student = bf(
+      outcomes ~ age + albumin + (1|gr(id, dist='student')),
+      sigma ~ trig + platelet + (1|gr(id, dist='student')), 
+      family = gaussian()
     ),
     gaussian = bf(
       outcomes ~ age + albumin + (1|id),
@@ -406,6 +410,6 @@ formulas = list(
 
 if ((run == -1)|(run == 5)) {
   print(paste("Simulating for time dependent random effects"))
-  path = paste0("results/time")
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, TRUE)
+  path = paste0("results/random_effects")
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
 }
