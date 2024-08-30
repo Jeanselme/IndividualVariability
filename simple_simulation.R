@@ -111,10 +111,9 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
       upper_bound <- summary_stats[, 'Q97.5']
       
       abs_diffs[[col]] <- abs(beta[i] - estimate)
-      relative[[col]] <- rerr(beta[i], estimate)
       in_bounds[[col]] <- as.numeric(beta[i] >= lower_bound & beta[i] <= upper_bound)
 
-    }, error = function(e) {abs_diffs[[col]] <- NA; relative[[col]] <- NA; in_bounds[[col]] <- NA})
+    }, error = function(e) {abs_diffs[[col]] <- NA; in_bounds[[col]] <- NA})
   }
   return(list(error=unlist(abs_diffs), relative=unlist(relative), coverage=unlist(in_bounds)))
 }
@@ -126,13 +125,11 @@ evaluate <- function(fit, newdata, columns, beta, tau, sds, corr, random_effects
   # RMSE beta
   beta_estimate = error_coeff(fit, columns, beta)
   errors$beta_out <- beta_estimate$error
-  errors$beta_out_relative <- beta_estimate$relative
   errors$beta_out_coverage <- beta_estimate$coverage
 
   # RMSE tau
   tau_estimate = error_coeff(fit, columns, tau, 'b_sigma_')
   errors$beta_omega <- tau_estimate$error
-  errors$beta_omega_relative <- tau_estimate$relative
   errors$beta_omega_coverage <- tau_estimate$coverage
 
   # RMSE corr
@@ -241,8 +238,9 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
 
     # Fit models
     for (method in names(formulas)) {
-      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 10, iter = 20, chains = 4, cores = 4)
       evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, data, columns, beta, tau, sds, corr, random_effects, last_time_indices))
+      print(evaluation)
     }
     
     # Save
