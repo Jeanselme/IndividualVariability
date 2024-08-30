@@ -65,24 +65,15 @@ random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects 
   return(random_effects)
 }
 
-## Random effects function (normally distributed) 
-random_effects_func_non_normal <- function(n_individuals, sd1 = 1, sd2 = 1, corr_effects = 0) { 
-  # Create covariance for the random effects
-  cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd2, sd2^2), nrow = 2)
-  random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0), Sigma = cov_matrix)
-  return(random_effects)
-}
-
-
 ## Outcomes function  
 outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, time_slope = FALSE) { 
-  # Random noise with the random effect
+  # Random noise with the random effects
   if (time_slope) {
     omega <- exp(covariates %*% tau  + random_effects[sample_times$id, 2] + sample_times$time * random_effects[sample_times$id, 3])
   } else {
     omega <- exp(covariates %*% tau + random_effects[sample_times$id, 2])
   }
-  noise <- rnorm(nrow(covariates), 0, omega)
+  noise <- rnorm(nrow(covariates), mean = 0, sd = omega)
   
   # Arbitrary choice of outcomes
   outcomes <- covariates %*% beta + random_effects[sample_times$id, 1] + noise
@@ -200,6 +191,17 @@ spaghetti_plot <- function(data, num_ids = 5) {
   ggsave('test.png', plot = p, width = 8, height = 6)
 }
 
+average_plot <- function(data, name) {
+  p <- ggplot(data, aes(x = time, y = outcomes)) +
+    geom_smooth(method = "loess", color = "blue", se = FALSE) +
+    labs(title = "Smooth Approximation of Outcomes Over Time",
+         x = "Time",
+         y = "Outcome") +
+    theme_minimal()
+
+  ggsave(name, plot = p, width = 8, height = 6)
+}
+
 # Create simulation study
 simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5), student = FALSE) {
   json = paste0(path, '.json')
@@ -238,9 +240,8 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
 
     # Fit models
     for (method in names(formulas)) {
-      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 10, iter = 20, chains = 4, cores = 4)
+      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
       evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, data, columns, beta, tau, sds, corr, random_effects, last_time_indices))
-      print(evaluation)
     }
     
     # Save
@@ -330,7 +331,7 @@ if ((run == -1)|(run == 2)) {
 ### Formula for MELSM comparison
 formulas = list(
     correct = bf(
-      outcomes ~ age + albumin + (1|id),
+      outcomes ~ age + albumin + 1 + (1|id),
       sigma ~ trig + platelet + (1|id), 
       family = gaussian()
     ),
