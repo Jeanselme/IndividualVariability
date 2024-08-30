@@ -6,6 +6,7 @@ library(rlist)
 library(survival)
 library(dplyr)
 library(ggplot2)
+library(mvnfast)
 
 # Generative functions
 ## Sampling function
@@ -57,7 +58,7 @@ random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects 
   sd3 <- sds[3]
   cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd3, corr_effects*sd1*sd2, sd2^2, corr_effects*sd2*sd3, corr_effects*sd1*sd3, corr_effects*sd2*sd3, sd3^2), nrow = 3)
   if (student) {
-    random_effects <- rmvt(n = n_individuals, sigma = cov_matrix, df = 15)
+    random_effects <- rmvt(mu = c(0, 0, 0), n = n_individuals, sigma = cov_matrix, df = 15)
   } else {
     random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0, 0), Sigma = cov_matrix)
   }
@@ -94,11 +95,7 @@ outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, t
 # Compute error for each model
 ## Function rmse
 rerr <- function(truth, estimate) {
-  if (mean(truth) != 0) {
-    return(mean(abs((truth - estimate) / truth)))
-  } else {
-    return(mean(abs(truth - estimate)))
-  }
+  return(mean(abs(truth - estimate)))
 }
 
 error_coeff <- function(fit, columns, beta, prefix = 'b_') {
@@ -288,7 +285,7 @@ if (length(args)==0) {
 # STUDY 1 
 ### Formula for MM comparison
 formulas = list(
-    melsm = bf(
+    correct = bf(
       outcomes ~ age + albumin + (1|id),
       sigma ~ trig + platelet + (1|id), 
       family = gaussian()
@@ -375,7 +372,7 @@ if ((run == -1)|(run == 3)) {
 # STUDY 3
 ### Formula for time comparison
 formulas = list(
-    melsm = bf(
+    correct = bf(
       outcomes ~ age + albumin + (1|id),
       sigma ~ trig + platelet + (1 + time|id), 
       family = gaussian()
@@ -390,13 +387,13 @@ formulas = list(
 if ((run == -1)|(run == 4)) {
   print(paste("Simulating for time dependent random effects"))
   path = paste0("results/time")
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, TRUE)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = TRUE)
 }
 
 # STUDY 4
 ### Random effect family
 formulas = list(
-    student = bf(
+    correct = bf(
       outcomes ~ age + albumin + (1|gr(id, dist='student')),
       sigma ~ trig + platelet + (1|gr(id, dist='student')), 
       family = gaussian()
@@ -411,5 +408,5 @@ formulas = list(
 if ((run == -1)|(run == 5)) {
   print(paste("Simulating for time dependent random effects"))
   path = paste0("results/random_effects")
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, student = TRUE)
 }
