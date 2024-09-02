@@ -440,6 +440,6 @@ formulas = list(
 
 if ((run == -1)|(run == 7)) {
   print("Simulating for correlated random effects")
-  path = "results/random_effects"
+  path = "results/corr_random_effects"
   simulation(path, formulas, n_sim, n_individuals, n_points, 0.5, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, student = TRUE)
 }
