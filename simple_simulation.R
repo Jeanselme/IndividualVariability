@@ -69,7 +69,7 @@ random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects 
 outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, time_slope = FALSE) { 
   # Random noise with the random effects
   if (time_slope) {
-    omega <- exp(covariates %*% tau  + random_effects[sample_times$id, 2] + sample_times$time * random_effects[sample_times$id, 3])
+    omega <- exp(covariates %*% tau + sample_times$time + random_effects[sample_times$id, 2] + sample_times$time * random_effects[sample_times$id, 3])
   } else {
     omega <- exp(covariates %*% tau + random_effects[sample_times$id, 2])
   }
@@ -102,9 +102,10 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
       upper_bound <- summary_stats[, 'Q97.5']
       
       abs_diffs[[col]] <- abs(beta[i] - estimate)
+      relative[[col]] <- abs_diffs[[col]] / abs(beta[i])
       in_bounds[[col]] <- as.numeric(beta[i] >= lower_bound & beta[i] <= upper_bound)
 
-    }, error = function(e) {abs_diffs[[col]] <- NA; in_bounds[[col]] <- NA})
+    }, error = function(e) {abs_diffs[[col]] <- 0; relative[[col]] <- 0; in_bounds[[col]] <- 0})
   }
   return(list(error=unlist(abs_diffs), relative=unlist(relative), coverage=unlist(in_bounds)))
 }
@@ -316,6 +317,13 @@ if ((run == -1)|(run == 2)) {
   }
 }
 
+if ((run == -1)|(run == 3)) {
+  print("Simulating when no correlation")
+  path = "results/nocorr"
+  identity = diag(4)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, identity, time_dependent, covariate_cov)
+}
+
 # # Simulation study: Impact of number of corr
 # if ((run == -1)|(run == 3)) {
 #   rho_list <- c(-0.5, -0.25, 0.25, 0.5)
@@ -355,6 +363,11 @@ formulas = list(
       sigma ~ trig + platelet, 
       family = gaussian()
     ),
+    sigmanore = bf(
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ age + albumin, 
+      family = gaussian()
+    ),
     mm = bf(
       outcomes ~ age + albumin + (1|id),
       sigma ~ 1,
@@ -362,9 +375,9 @@ formulas = list(
     )
   )
 
-if ((run == -1)|(run == 3)) {
-  print(paste("Simulating for MELSM misspecification"))
-  path = paste0("results/misspecification")
+if ((run == -1)|(run == 4)) {
+  print("Simulating for MELSM misspecification")
+  path = "results/misspecification"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
 }
 
@@ -373,7 +386,7 @@ if ((run == -1)|(run == 3)) {
 formulas = list(
     correct = bf(
       outcomes ~ age + albumin + (1|id),
-      sigma ~ trig + platelet + (1 + time|id), 
+      sigma ~ trig + platelet + time + (1 + time|id), 
       family = gaussian()
     ),
     melsm_notime = bf(
@@ -383,9 +396,9 @@ formulas = list(
     )
   )
 
-if ((run == -1)|(run == 4)) {
-  print(paste("Simulating for time dependent random effects"))
-  path = paste0("results/time")
+if ((run == -1)|(run == 5)) {
+  print("Simulating for time dependent random effects")
+  path = "results/time"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = TRUE)
 }
 
@@ -404,8 +417,8 @@ formulas = list(
     )
   )
 
-if ((run == -1)|(run == 5)) {
-  print(paste("Simulating for time dependent random effects"))
-  path = paste0("results/random_effects")
+if ((run == -1)|(run == 6)) {
+  print("Simulating for time dependent random effects")
+  path = "results/random_effects"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, student = TRUE)
 }
