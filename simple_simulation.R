@@ -422,3 +422,24 @@ if ((run == -1)|(run == 6)) {
   path = "results/random_effects"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, student = TRUE)
 }
+
+# STUDY 4
+### Random effect family
+formulas = list(
+    correct = bf(
+      outcomes ~ age + albumin + (1|I|id),
+      sigma ~ trig + platelet + (1|I|id), 
+      family = gaussian()
+    )
+    incorrect = bf(
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ trig + platelet + (1|id), 
+      family = gaussian()
+    )
+  )
+
+if ((run == -1)|(run == 7)) {
+  print("Simulating for correlated random effects")
+  path = "results/random_effects"
+  simulation(path, formulas, n_sim, n_individuals, n_points, 0.5, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, student = TRUE)
+}
