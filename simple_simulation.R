@@ -321,7 +321,7 @@ if ((run == -1)|(run == 3)) {
   print("Simulating when no correlation")
   path = "results/nocorr"
   identity = diag(4)
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, identity, time_dependent, covariate_cov)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, identity)
 }
 
 # # Simulation study: Impact of number of corr
