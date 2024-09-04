@@ -220,6 +220,9 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     }
     print("File does not exist.")
   }  
+  if (evaluation$start > n_sim) {
+    return()
+  }
   for (i in evaluation$start:n_sim) {
     # Fix seed
     set.seed(i)
