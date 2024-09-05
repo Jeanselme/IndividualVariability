@@ -324,13 +324,6 @@ if ((run == -1)|(run == 2)) {
   }
 }
 
-if ((run == -1)|(run == 3)) {
-  print("Simulating when no correlation")
-  path = "results/nocorr"
-  identity = diag(4)
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, identity)
-}
-
 # # Simulation study: Impact of number of corr
 # if ((run == -1)|(run == 3)) {
 #   rho_list <- c(-0.5, -0.25, 0.25, 0.5)
@@ -381,6 +374,13 @@ formulas = list(
       family = gaussian()
     )
   )
+
+if ((run == -1)|(run == 3)) {
+  print("Simulating when no correlation")
+  path = "results/nocorr"
+  identity = diag(4)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, identity)
+}
 
 if ((run == -1)|(run == 4)) {
   print("Simulating for MELSM misspecification")
