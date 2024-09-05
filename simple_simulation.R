@@ -100,12 +100,16 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
       estimate <- summary_stats[, 'Estimate']
       lower_bound <- summary_stats[, 'Q2.5']
       upper_bound <- summary_stats[, 'Q97.5']
-      
+
       abs_diffs[[col]] <- abs(beta[i] - estimate)
       relative[[col]] <- abs_diffs[[col]] / abs(beta[i])
       in_bounds[[col]] <- as.numeric(beta[i] >= lower_bound & beta[i] <= upper_bound)
 
-    }, error = function(e) {abs_diffs[[col]] <- 0; relative[[col]] <- 0; in_bounds[[col]] <- 0})
+    }, error = function(e) {
+      abs_diffs[[col]] <<- 0
+      relative[[col]] <<- 0
+      in_bounds[[col]] <<- 0
+    })
   }
   return(list(error=unlist(abs_diffs), relative=unlist(relative), coverage=unlist(in_bounds)))
 }
