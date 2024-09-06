@@ -121,11 +121,13 @@ evaluate <- function(fit, newdata, columns, beta, tau, sds, corr, random_effects
   # RMSE beta
   beta_estimate = error_coeff(fit, columns, beta)
   errors$beta_out <- beta_estimate$error
+  errors$beta_out_relative <- beta_estimate$relative
   errors$beta_out_coverage <- beta_estimate$coverage
 
   # RMSE tau
   tau_estimate = error_coeff(fit, columns, tau, 'b_sigma_')
   errors$beta_omega <- tau_estimate$error
+  errors$beta_omega_relative <- tau_estimate$relative
   errors$beta_omega_coverage <- tau_estimate$coverage
 
   # RMSE corr
