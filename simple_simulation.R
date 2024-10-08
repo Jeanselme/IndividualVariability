@@ -58,7 +58,7 @@ random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects 
   sd3 <- sds[3]
   cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd3, corr_effects*sd1*sd2, sd2^2, corr_effects*sd2*sd3, corr_effects*sd1*sd3, corr_effects*sd2*sd3, sd3^2), nrow = 3)
   if (student) {
-    random_effects <- rmvt(mu = c(0, 0, 0), n = n_individuals, sigma = cov_matrix, df = 15)
+    random_effects <- rmvt(mu = c(0, 0, 0), n = n_individuals, sigma = cov_matrix, df = 3)
   } else {
     random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0, 0), Sigma = cov_matrix)
   }
