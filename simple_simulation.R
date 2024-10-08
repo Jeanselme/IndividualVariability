@@ -286,7 +286,7 @@ n_individuals <- 200
 n_points <- 15
 
 ## Simulation
-n_sim <- 1
+n_sim <- 100
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args)==0) {
