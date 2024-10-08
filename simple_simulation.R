@@ -239,12 +239,12 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     sample_times <- age_diff_func(sample_times, covariates) # Update times to respect age difference
     random_effects <- random_effects_func(n_individuals, sds, corr_effects = corr, student = student)
     if (sinus) {
-      covariates <- cbind(covariates, sin(covariates[, 1]))
-      outcomes <- outcomes_func(covariates[,2:5], random_effects, sample_times, beta, tau, time_slope)
+      covariates <- as.data.frame(covariates)
+      covariates$sinage <- sin(covariates$age)
+      outcomes <- outcomes_func(as.matrix(covariates[, c("sinage",  "albumin", "trig", "platelet")]), random_effects, sample_times, beta, tau, time_slope)
     } else {
       outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, time_slope)
-    }
-    
+    }    
 
     last_time_indices <- sample_times %>%
       group_by(id) %>%
@@ -256,7 +256,7 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
 
     # Fit models
     for (method in names(formulas)) {
-      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 10, iter = 20, chains = 4, cores = 4)
+      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
       evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, data, columns, beta, tau, sds, corr, random_effects, last_time_indices))
     }
     
@@ -475,7 +475,7 @@ formulas = list(
   )
 
 if ((run == -1)|(run == 8)) {
-  print("Simulating for correlated random effects")
+  print("Simulating for sinus age")
   path = "results/sinus"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, sinus = TRUE)
 }
