@@ -210,7 +210,7 @@ average_plot <- function(data, name) {
 }
 
 # Create simulation study
-simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5), student = FALSE) {
+simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5), student = FALSE, sinus = FALSE) {
   json = paste0(path, '.json')
   if (file.exists(json)) {
     # Load the file
@@ -238,7 +238,13 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     covariates <- covariates_func(sample_times, covariate_mean, time_dependent, covariate_cov)
     sample_times <- age_diff_func(sample_times, covariates) # Update times to respect age difference
     random_effects <- random_effects_func(n_individuals, sds, corr_effects = corr, student = student)
-    outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, time_slope)
+    if (sinus) {
+      covariates <- cbind(covariates, sin(covariates[, 1]))
+      outcomes <- outcomes_func(covariates[,2:5], random_effects, sample_times, beta, tau, time_slope)
+    } else {
+      outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, time_slope)
+    }
+    
 
     last_time_indices <- sample_times %>%
       group_by(id) %>%
@@ -250,7 +256,7 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
 
     # Fit models
     for (method in names(formulas)) {
-      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
+      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 10, iter = 20, chains = 4, cores = 4)
       evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, data, columns, beta, tau, sds, corr, random_effects, last_time_indices))
     }
     
@@ -280,7 +286,7 @@ n_individuals <- 200
 n_points <- 15
 
 ## Simulation
-n_sim <- 100
+n_sim <- 1
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args)==0) {
@@ -450,5 +456,26 @@ formulas = list(
 if ((run == -1)|(run == 7)) {
   print("Simulating for correlated random effects")
   path = "results/corr_random_effects"
-  simulation(path, formulas, n_sim, n_individuals, n_points, 0.5, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, student = TRUE)
+  simulation(path, formulas, n_sim, n_individuals, n_points, 0.5, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
+}
+
+# STUDY 6
+### Sinus
+formulas = list(
+    correct = bf(
+      outcomes ~ sin(age) + albumin + (1|id),
+      sigma ~ trig + platelet + (1|id), 
+      family = gaussian()
+    ),
+    incorrect = bf(
+      outcomes ~ age + albumin + (1|id),
+      sigma ~ trig + platelet + (1|id), 
+      family = gaussian()
+    )
+  )
+
+if ((run == -1)|(run == 8)) {
+  print("Simulating for correlated random effects")
+  path = "results/sinus"
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, sinus = TRUE)
 }
