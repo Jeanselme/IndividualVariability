@@ -78,8 +78,8 @@ covariate_mean <- colMeans(pbc_scale, na.rm = TRUE)
 covariate_cov <- cov(pbc_scale, use="complete.obs")
 
 ## True model (CANNOT CHANGE 0. without changing experiment)
-beta <- c(1, 0.5, 0., 0.)
-tau <- c(0.8, 0, 0.8, 0.5)
+beta <- c(0.5, 0.5, 0., 0.)
+tau <- c(0.8, 0, 0.8, 0.)
 corr <- 0
 
 ## Population
@@ -87,7 +87,7 @@ n_individuals <- 200
 n_points <- 15
 
 ## Simulation
-n_sim <- 100
+n_sim <- 10
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args)==0) {
@@ -191,7 +191,7 @@ if ((run == -1)|(run == 4)) {
 formulas = list(
     correct = bf(
       outcomes ~ age + albumin + (1|id),
-      sigma ~ age + trig + time + (1 + time|id), 
+      sigma ~ age + trig + (1 + age|id), 
       family = gaussian()
     ),
     melsm_notime = bf(

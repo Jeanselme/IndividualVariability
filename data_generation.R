@@ -26,7 +26,7 @@ covariates_func <- function(sampling, n_individuals, observations, mean, sigma, 
   covariates <- as.data.frame(covariates, col.names = columns)
   covariates$age <- covariates$age + sampling$time
 
-  return(covariates)
+  return(scale(covariates))
 }
 
 ## Random effects function (normally distributed) 
