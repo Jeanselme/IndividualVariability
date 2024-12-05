@@ -30,7 +30,7 @@ covariates_func <- function(sampling, n_individuals, observations, mean, sigma, 
 }
 
 ## Random effects function (normally distributed) 
-random_effects_func <- function(n_individuals, sds = c(2, 1), corr_effects = 0, student = FALSE) { 
+random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects = 0, student = FALSE) { 
   # sds - Standard deviations for the different random effects
   # corr_effects - Correlation between the random effects
   # student - If TRUE, the random effects are drawn from a t-distribution
@@ -38,14 +38,16 @@ random_effects_func <- function(n_individuals, sds = c(2, 1), corr_effects = 0, 
   # Create covariance for the random effects
   sd1 <- sds[1]
   sd2 <- sds[2]
-  cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd2, sd2^2), nrow = 2)
+  sd3 <- sds[3]
+  cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd3, corr_effects*sd1*sd2, sd2^2, corr_effects*sd2*sd3, corr_effects*sd1*sd3, corr_effects*sd2*sd3, sd3^2), nrow = 3)
   if (student) {
-    random_effects <- rmvt(mu = c(0, 0), n = n_individuals, sigma = cov_matrix, df = 3)
+    random_effects <- rmvt(mu = c(0, 0, 0), n = n_individuals, sigma = cov_matrix, df = 3)
   } else {
-    random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0), Sigma = cov_matrix)
+    random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0, 0), Sigma = cov_matrix)
   }
   return(random_effects)
 }
+
 
 
 ## Outcomes function  
@@ -59,9 +61,9 @@ outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, t
 
   # Random noise with the random effects
   if (time_slope) {
-    omega <- exp(as.matrix(covariates) %*% tau + sample_times$time + random_effects[sample_times$id, 2])
+    omega <- exp(covariates %*% tau + random_effects[sample_times$id, 2] + sample_times$age * random_effects[sample_times$id, 3])
   } else {
-    omega <- exp(as.matrix(covariates) %*% tau + random_effects[sample_times$id, 2])
+    omega <- exp(covariates %*% tau + random_effects[sample_times$id, 2])
   }
   noise <- rnorm(nrow(covariates), mean = 0, sd = omega)
   
