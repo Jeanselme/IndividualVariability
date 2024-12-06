@@ -59,8 +59,10 @@ evaluate <- function(fit, newdata, columns, beta, tau, sds, corr, random_effects
 
   sd1 <- sds[1]
   sd2 <- sds[2]
+  sd3 <- sds[3]
   try(errors$sd_re_out <- rerr(sd1, posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
   try(errors$sd_re_omega_0 <- rerr(sd2, posterior_summary(fit, variable='sd_id__sigma_Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_1 <- rerr(sd3, posterior_summary(fit, variable='sd_id__sigma_time')[, 'Estimate']), silent = TRUE)
 
   # RMSE outcomes
   errors$last <- rerr(fitted(fit, newdata = newdata[indices,])[, 'Estimate'], newdata$outcomes[indices])
