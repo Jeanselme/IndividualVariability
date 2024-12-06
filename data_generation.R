@@ -24,13 +24,13 @@ covariates_func <- function(sampling, n_individuals, observations, mean, sigma, 
   # Propagate the covariates over time and make age change
   covariates <- covariates[unlist(lapply(seq_along(observations), function(i) rep(i, observations[i]))), ]
   covariates <- as.data.frame(covariates, col.names = columns)
-  covariates$age <- covariates$age + sampling$time
+  covariates$age <- scale(covariates$age + sampling$time)
 
-  return(scale(covariates))
+  return(covariates)
 }
 
 ## Random effects function (normally distributed) 
-random_effects_func <- function(n_individuals, sds = c(2, 1, 0.5), corr_effects = 0, student = FALSE) { 
+random_effects_func <- function(n_individuals, sds, corr_effects = 0, student = FALSE) { 
   # sds - Standard deviations for the different random effects
   # corr_effects - Correlation between the random effects
   # student - If TRUE, the random effects are drawn from a t-distribution

@@ -12,7 +12,7 @@ source('data_generation.R')
 source('evaluation.R')
 
 # Create simulation study
-simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5), student = FALSE, sinus = FALSE) {
+simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5), student = FALSE, sinus = FALSE) {
   json = paste0(path, '.json')
   if (file.exists(json)) {
     # Load the file
@@ -36,9 +36,9 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     set.seed(i)
 
     # Generate data
-    observations <- sample(2:n_points + 1, n_individuals, replace=TRUE) # Add one point for evaluation
+    observations <- sample(1:(2*n_points - 1), n_individuals, replace=TRUE) + 1 # Add one point for evaluation
     sample_times <- sampling_func(observations) 
-    covariates <- covariates_func(sample_times, n_individuals, observations, covariate_mean, covariate_cov)
+    covariates <- covariates_func(sample_times, n_individuals, observations, covariate_mean, covariate_cov, columns)
     random_effects <- random_effects_func(n_individuals, sds, corr_effects = corr, student = student)
     if (sinus) {
       covariates <- as.data.frame(covariates)
@@ -72,7 +72,6 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
 # Default parameters
 ## Data
 columns <- c("age", "albumin", "trig", "platelet")
-time_dependent <- c(TRUE, FALSE, FALSE, FALSE) # To unsure time consistency over multiple draw
 pbc_scale <- scale(pbc[columns])
 covariate_mean <- colMeans(pbc_scale, na.rm = TRUE)
 covariate_cov <- cov(pbc_scale, use="complete.obs")
@@ -87,7 +86,7 @@ n_individuals <- 200
 n_points <- 15
 
 ## Simulation
-n_sim <- 10
+n_sim <- 100
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args)==0) {
@@ -119,7 +118,7 @@ if ((run == -1)|(run == 1)) {
   for (n_individuals_exp in n_individuals_list) {
     print(paste("Simulating for", n_individuals_exp, "individuals"))
     path = paste0("results/individuals", n_individuals_exp)
-    simulation(path, formulas, n_sim, n_individuals_exp, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
+    simulation(path, formulas, n_sim, n_individuals_exp, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov)
   }
 }
 
@@ -129,7 +128,7 @@ if ((run == -1)|(run == 2)) {
   for (n_points_exp in n_points_list) {
     print(paste("Simulating for", n_points_exp, "points"))
     path = paste0("results/points", n_points_exp)
-    simulation(path, formulas, n_sim, n_individuals, n_points_exp, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
+    simulation(path, formulas, n_sim, n_individuals, n_points_exp, corr, columns, beta, tau, covariate_mean, covariate_cov)
   }
 }
 
@@ -177,13 +176,13 @@ if ((run == -1)|(run == 3)) {
   print("Simulating when no correlation")
   path = "results/nocorr"
   identity = diag(4)
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, identity)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, identity)
 }
 
 if ((run == -1)|(run == 4)) {
   print("Simulating for MELSM misspecification")
   path = "results/misspecification"
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov)
 }
 
 # STUDY 3
@@ -204,7 +203,7 @@ formulas = list(
 if ((run == -1)|(run == 5)) {
   print("Simulating for time dependent random effects")
   path = "results/time"
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, time_slope = TRUE)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, time_slope = TRUE)
 }
 
 # STUDY 4
@@ -225,7 +224,7 @@ formulas = list(
 if ((run == -1)|(run == 6)) {
   print("Simulating for time dependent random effects")
   path = "results/random_effects"
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, student = TRUE)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, student = TRUE)
 }
 
 # STUDY 5
@@ -246,7 +245,7 @@ formulas = list(
 if ((run == -1)|(run == 7)) {
   print("Simulating for correlated random effects")
   path = "results/corr_random_effects"
-  simulation(path, formulas, n_sim, n_individuals, n_points, 0.5, columns, beta, tau, covariate_mean, time_dependent, covariate_cov)
+  simulation(path, formulas, n_sim, n_individuals, n_points, 0.5, columns, beta, tau, covariate_mean, covariate_cov)
 }
 
 # STUDY 6
@@ -267,5 +266,5 @@ formulas = list(
 if ((run == -1)|(run == 8)) {
   print("Simulating for sinus age")
   path = "results/sinus"
-  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, time_dependent, covariate_cov, sinus = TRUE)
+  simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, sinus = TRUE)
 }
