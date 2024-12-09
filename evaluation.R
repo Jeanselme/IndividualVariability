@@ -12,16 +12,18 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
   for (i in seq_along(beta)) {
     col <- columns[i]
     tryCatch({
-      summary_stats <- posterior_summary(fit, variable = paste0(prefix, col))
+      summary_stats <- tryCatch({
+        posterior_summary(fit, variable = paste0(prefix, col))
+      }, error = function(e) {return(posterior_summary(fit, variable = paste0(prefix, 'sin', col)))})
+      
       estimate <- summary_stats[, 'Estimate']
       lower_bound <- summary_stats[, 'Q2.5']
       upper_bound <- summary_stats[, 'Q97.5']
 
-      mean[[col]] <- mean(estimate)
+      mean[[col]] <- estimate
       abs_diffs[[col]] <- abs(beta[i] - estimate)
       relative[[col]] <- abs_diffs[[col]] / abs(beta[i])
       in_bounds[[col]] <- as.numeric(beta[i] >= lower_bound & beta[i] <= upper_bound)
-
     }, error = function(e) {
       mean[[col]] <<- NA
       abs_diffs[[col]] <<- NA
@@ -54,15 +56,15 @@ evaluate <- function(fit, newdata, columns, beta, tau, sds, corr, random_effects
   try(errors$corr <- rerr(corr, posterior_summary(fit, variable='cor_id__Intercept__sigma_Intercept')[, 'Estimate']), silent = TRUE)
 
   # RMSE random effects
-  try(errors$re_out <- rerr(random_effects[, 1],  posterior_summary(fit, variable='r_id')[, 'Estimate']), silent = TRUE)
-  try(errors$re_omega_0 <- rerr(random_effects[, 2], posterior_summary(fit, pars='r_id__sigma.*Intercept.*')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_out_0_error <- rerr(sds[1], posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_out_1_error <- rerr(sds[4], posterior_summary(fit, variable='sd_id__age')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_0_error <- rerr(sds[2], posterior_summary(fit, variable='sd_id__sigma_Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_1_error <- rerr(sds[3], posterior_summary(fit, variable='sd_id__sigma_age')[, 'Estimate']), silent = TRUE)
 
-  sd1 <- sds[1]
-  sd2 <- sds[2]
-  sd3 <- sds[3]
-  try(errors$sd_re_out <- rerr(sd1, posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
-  try(errors$sd_re_omega_0 <- rerr(sd2, posterior_summary(fit, variable='sd_id__sigma_Intercept')[, 'Estimate']), silent = TRUE)
-  try(errors$sd_re_omega_1 <- rerr(sd3, posterior_summary(fit, variable='sd_id__sigma_time')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_out_0 <- mean(posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_out_1 <- mean(posterior_summary(fit, variable='sd_id__age')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_0 <- mean(posterior_summary(fit, variable='sd_id__sigma_Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_1 <- mean(posterior_summary(fit, variable='sd_id__sigma_age')[, 'Estimate']), silent = TRUE)
 
   # RMSE outcomes
   errors$last <- rerr(fitted(fit, newdata = newdata[indices,])[, 'Estimate'], newdata$outcomes[indices])

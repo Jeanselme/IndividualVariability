@@ -12,7 +12,7 @@ source('data_generation.R')
 source('evaluation.R')
 
 # Create simulation study
-simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5), student = FALSE, sinus = FALSE) {
+simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5, 0.5), student = FALSE, sinus = FALSE) {
   json = paste0(path, '.json')
   if (file.exists(json)) {
     # Load the file
@@ -24,7 +24,6 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     evaluation = list(start = 1)
     for (name in names(formulas)) {
       evaluation[[name]] = list()
-
     }
     print("File does not exist.")
   }  
@@ -40,13 +39,7 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     sample_times <- sampling_func(observations) 
     covariates <- covariates_func(sample_times, n_individuals, observations, covariate_mean, covariate_cov, columns)
     random_effects <- random_effects_func(n_individuals, sds, corr_effects = corr, student = student)
-    if (sinus) {
-      covariates <- as.data.frame(covariates)
-      covariates$sinage <- sin(covariates$age)
-      outcomes <- outcomes_func(as.matrix(covariates[, c("sinage",  "albumin", "trig", "platelet")]), random_effects, sample_times, beta, tau, time_slope)
-    } else {
-      outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, time_slope)
-    }    
+    outcomes <- outcomes_func(covariates, random_effects, sample_times, beta, tau, time_slope, sinus)   
 
     last_time_indices <- sample_times %>%
       group_by(id) %>%
@@ -60,7 +53,6 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
       fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
       evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, data, columns, beta, tau, sds, corr, random_effects, last_time_indices))
     }
-    
     # Save
     evaluation$start = evaluation$start + 1
     list.save(evaluation, file = json)
@@ -142,11 +134,11 @@ formulas = list(
     ),
     sigma = bf(
       outcomes ~ age + albumin + (1|id),
-      sigma ~ age + albumin + (1|id), 
+      sigma ~ trig + (1|id), 
       family = gaussian()
     ),
     outcomes = bf(
-      outcomes ~ age + trig + (1|id),
+      outcomes ~ albumin + (1|id),
       sigma ~ age + trig + (1|id), 
       family = gaussian()
     ),
@@ -189,8 +181,13 @@ if ((run == -1)|(run == 4)) {
 ### Formula for time comparison
 formulas = list(
     correct = bf(
-      outcomes ~ age + albumin + (1|id),
+      outcomes ~ age + albumin + (1 + age|id),
       sigma ~ age + trig + (1 + age|id), 
+      family = gaussian()
+    ),
+    melsm_notimeomega = bf(
+      outcomes ~ age + albumin + (1 + age|id),
+      sigma ~ age + trig + (1|id), 
       family = gaussian()
     ),
     melsm_notime = bf(

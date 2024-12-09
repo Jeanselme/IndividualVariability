@@ -36,14 +36,18 @@ random_effects_func <- function(n_individuals, sds, corr_effects = 0, student = 
   # student - If TRUE, the random effects are drawn from a t-distribution
 
   # Create covariance for the random effects
-  sd1 <- sds[1]
-  sd2 <- sds[2]
-  sd3 <- sds[3]
-  cov_matrix <- matrix(c(sd1^2, corr_effects*sd1*sd2, corr_effects*sd1*sd3, corr_effects*sd1*sd2, sd2^2, corr_effects*sd2*sd3, corr_effects*sd1*sd3, corr_effects*sd2*sd3, sd3^2), nrow = 3)
+  cov_matrix_vector <- c(
+    sds[1]^2, corr_effects * sds[1] * sds[2], corr_effects * sds[1] * sds[3], corr_effects * sds[1] * sds[4],
+    corr_effects * sds[1] * sds[2], sds[2]^2, corr_effects * sds[2] * sds[3], corr_effects * sds[2] * sds[4],
+    corr_effects * sds[1] * sds[3], corr_effects * sds[2] * sds[3], sds[3]^2, corr_effects * sds[3] * sds[4],
+    corr_effects * sds[1] * sds[4], corr_effects * sds[2] * sds[4], corr_effects * sds[3] * sds[4], sds[4]^2
+  )
+
+  cov_matrix <- matrix(cov_matrix_vector, nrow = 4, byrow = TRUE)
   if (student) {
-    random_effects <- rmvt(mu = c(0, 0, 0), n = n_individuals, sigma = cov_matrix, df = 3)
+    random_effects <- rmvt(mu = c(0, 0, 0, 0), n = n_individuals, sigma = cov_matrix, df = 3)
   } else {
-    random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0, 0), Sigma = cov_matrix)
+    random_effects <- mvrnorm(n = n_individuals, mu = c(0, 0, 0, 0), Sigma = cov_matrix)
   }
   return(random_effects)
 }
@@ -51,24 +55,33 @@ random_effects_func <- function(n_individuals, sds, corr_effects = 0, student = 
 
 
 ## Outcomes function  
-outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, time_slope = FALSE) {    
+outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, time_slope = FALSE, sinus = FALSE) {    
   # covariates: data frame from covariates_func
   # random_effects: matrix from random_effects_func
   # sample_times: data frame from sampling_func
   # beta: fixed effects
   # tau: fixed effects for the variance
   # time_slope: if TRUE, the variance is time-dependent
+  # sinus: if TRUE, the outcome is sinusoidal on age (not variance)
 
   # Random noise with the random effects
+  covariates_out <- covariates
+  if (sinus) {
+    covariates_out$age <- sin(covariates$age)
+  }
+
   if (time_slope) {
     omega <- exp(as.matrix(covariates) %*% tau + random_effects[sample_times$id, 2] + covariates$age * random_effects[sample_times$id, 3])
   } else {
     omega <- exp(as.matrix(covariates) %*% tau + random_effects[sample_times$id, 2])
   }
   noise <- rnorm(nrow(covariates), mean = 0, sd = omega)
-  
-  # Arbitrary choice of outcomes
-  outcomes <- as.matrix(covariates) %*% beta + random_effects[sample_times$id, 1] + noise
+
+  if (time_slope) {
+    outcomes <- as.matrix(covariates_out) %*% beta + random_effects[sample_times$id, 1] + covariates_out$age * random_effects[sample_times$id, 4] + noise
+  } else {
+    outcomes <- as.matrix(covariates_out) %*% beta + random_effects[sample_times$id, 1] + noise
+  }
 
   return(outcomes)
 }
