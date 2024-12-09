@@ -23,10 +23,10 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
       in_bounds[[col]] <- as.numeric(beta[i] >= lower_bound & beta[i] <= upper_bound)
 
     }, error = function(e) {
-      mean[[col]] <<- 0
-      abs_diffs[[col]] <<- 0
-      relative[[col]] <<- 0
-      in_bounds[[col]] <<- 0
+      mean[[col]] <<- NA
+      abs_diffs[[col]] <<- NA
+      relative[[col]] <<- NA
+      in_bounds[[col]] <<- NA
     })
   }
   return(list(mean=unlist(mean), error=unlist(abs_diffs), relative=unlist(relative), coverage=unlist(in_bounds)))
@@ -89,7 +89,7 @@ summarise_perf <- function(evaluation) {
     errors[[model]] <- list()
     for (quantity in names(evaluation[[model]]))
       errors[[model]][[quantity]] <- list(
-        value=colMeans(evaluation[[model]][[quantity]]),
+        value=colMeans(evaluation[[model]][[quantity]], na.rm = TRUE),
         std=colSds(evaluation[[model]][[quantity]], na.rm = TRUE)
       )
   }
