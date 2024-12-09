@@ -61,7 +61,7 @@ outcomes_func <- function(covariates, random_effects, sample_times, beta, tau, t
 
   # Random noise with the random effects
   if (time_slope) {
-    omega <- exp(as.matrix(covariates) %*% tau + random_effects[sample_times$id, 2] + sample_times$age * random_effects[sample_times$id, 3])
+    omega <- exp(as.matrix(covariates) %*% tau + random_effects[sample_times$id, 2] + covariates$age * random_effects[sample_times$id, 3])
   } else {
     omega <- exp(as.matrix(covariates) %*% tau + random_effects[sample_times$id, 2])
   }
