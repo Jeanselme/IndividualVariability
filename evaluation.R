@@ -92,7 +92,7 @@ summarise_perf <- function(evaluation) {
     for (quantity in names(evaluation[[model]]))
       errors[[model]][[quantity]] <- list(
         value=colMeans(evaluation[[model]][[quantity]], na.rm = TRUE),
-        std=colSds(evaluation[[model]][[quantity]], na.rm = TRUE)
+        std=tryCatch({colSds(evaluation[[model]][[quantity]], na.rm = TRUE)}, error = function(e) {return(NA)})
       )
   }
   return(errors)
