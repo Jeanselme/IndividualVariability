@@ -12,7 +12,7 @@ source('data_generation.R')
 source('evaluation.R')
 
 # Create simulation study
-simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, time_slope = FALSE, sds = c(2, 1, 0.5, 0.5), student = FALSE, sinus = FALSE) {
+simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, time_slope = FALSE, sds = c(1, 0.5, 0.25, 0.25), student = FALSE, sinus = FALSE) {
   json = paste0(path, '.json')
   if (file.exists(json)) {
     # Load the file
@@ -148,13 +148,13 @@ formulas = list(
       family = gaussian()
     ),
     nore = bf(
-      outcomes ~ age + albumin,
+      outcomes ~ age + albumin + (1|id),
       sigma ~ age + trig, 
       family = gaussian()
     ),
     sigmanore = bf(
       outcomes ~ age + albumin + (1|id),
-      sigma ~ age + albumin, 
+      sigma ~ trig, 
       family = gaussian()
     ),
     mm = bf(
