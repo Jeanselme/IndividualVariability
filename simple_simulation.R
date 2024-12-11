@@ -250,10 +250,10 @@ if ((run == -1)|(run == 7)) {
 formulas = list(
     correct = bf(
       outcomes ~ sin(age) + albumin + (1|id),
-      sigma ~ sin(age) + trig + (1|id), 
+      sigma ~ age + trig + (1|id), 
       family = gaussian()
     ),
-    incorrect = bf(
+    nonsinus = bf(
       outcomes ~ age + albumin + (1|id),
       sigma ~ age + trig + (1|id), 
       family = gaussian()
