@@ -240,9 +240,12 @@ formulas = list(
   )
 
 if ((run == -1)|(run == 7)) {
-  print("Simulating for correlated random effects")
-  path = "results/corr_random_effects"
-  simulation(path, formulas, n_sim, n_individuals, n_points, 0.5, columns, beta, tau, covariate_mean, covariate_cov)
+  n_corr_list <- c(0.5, 0.9)
+  for (n_corr_exp in n_corr_list) {
+    print("Simulating for correlated random effects")
+    path = paste0("results/corr_random_effects", n_corr_exp)
+    simulation(path, formulas, n_sim, n_individuals, n_points, n_corr_exp, columns, beta, tau, covariate_mean, covariate_cov)
+  }
 }
 
 # STUDY 6
