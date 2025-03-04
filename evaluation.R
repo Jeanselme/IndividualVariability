@@ -4,6 +4,12 @@ rerr <- function(truth, estimate) {
   return(mean(abs(truth - estimate)))
 }
 
+coverage <- function(truth, summary_stats) {
+  lower_bound <- summary_stats[, 'Q2.5']
+  upper_bound <- summary_stats[, 'Q97.5']
+  return(as.numeric(truth >= lower_bound & truth <= upper_bound))
+}
+
 error_coeff <- function(fit, columns, beta, prefix = 'b_') {
   abs_diffs <- list()
   relative <- list()
@@ -17,13 +23,11 @@ error_coeff <- function(fit, columns, beta, prefix = 'b_') {
       }, error = function(e) {return(posterior_summary(fit, variable = paste0(prefix, 'sin', col)))})
       
       estimate <- summary_stats[, 'Estimate']
-      lower_bound <- summary_stats[, 'Q2.5']
-      upper_bound <- summary_stats[, 'Q97.5']
 
       mean[[col]] <- estimate
       abs_diffs[[col]] <- abs(beta[i] - estimate)
       relative[[col]] <- abs_diffs[[col]] / abs(beta[i])
-      in_bounds[[col]] <- as.numeric(beta[i] >= lower_bound & beta[i] <= upper_bound)
+      in_bounds[[col]] <- coverage(beta[i], summary_stats)
     }, error = function(e) {
       mean[[col]] <<- NA
       abs_diffs[[col]] <<- NA
@@ -41,15 +45,11 @@ evaluate <- function(fit, newdata, columns, beta, tau, sds, corr, random_effects
   # RMSE beta
   beta_estimate = error_coeff(fit, columns, beta)
   errors$beta <- beta_estimate$mean
-  errors$beta_out_error <- beta_estimate$error
-  errors$beta_out_relative <- beta_estimate$relative
   errors$beta_out_coverage <- beta_estimate$coverage
 
   # RMSE tau
   tau_estimate = error_coeff(fit, columns, tau, 'b_sigma_')
   errors$beta_omega <- tau_estimate$mean
-  errors$beta_omega_error <- tau_estimate$error
-  errors$beta_omega_relative <- tau_estimate$relative
   errors$beta_omega_coverage <- tau_estimate$coverage
 
   # RMSE corr
@@ -57,9 +57,16 @@ evaluate <- function(fit, newdata, columns, beta, tau, sds, corr, random_effects
 
   # RMSE random effects
   try(errors$sd_re_out_0_error <- rerr(sds[1], posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_out_0_coverage <- coverage(sds[1], posterior_summary(fit, variable='sd_id__Intercept')), silent = TRUE)
+
   try(errors$sd_re_out_1_error <- rerr(sds[4], posterior_summary(fit, variable='sd_id__age')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_out_1_coverage <- coverage(sds[4], posterior_summary(fit, variable='sd_id__age')), silent = TRUE)
+
   try(errors$sd_re_omega_0_error <- rerr(sds[2], posterior_summary(fit, variable='sd_id__sigma_Intercept')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_0_coverage <- coverage(sds[2], posterior_summary(fit, variable='sd_id__sigma_Intercept')), silent = TRUE)
+
   try(errors$sd_re_omega_1_error <- rerr(sds[3], posterior_summary(fit, variable='sd_id__sigma_age')[, 'Estimate']), silent = TRUE)
+  try(errors$sd_re_omega_1_coverage <- coverage(sds[3], posterior_summary(fit, variable='sd_id__sigma_age')), silent = TRUE)
 
   try(errors$sd_re_out_0 <- mean(posterior_summary(fit, variable='sd_id__Intercept')[, 'Estimate']), silent = TRUE)
   try(errors$sd_re_out_1 <- mean(posterior_summary(fit, variable='sd_id__age')[, 'Estimate']), silent = TRUE)
