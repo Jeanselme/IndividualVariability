@@ -9,28 +9,16 @@ library(ggplot2)
 library(mvnfast)
 
 source('data_generation.R')
-source('evaluation.R')
 
 # Create simulation study
 simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, time_slope = FALSE, sds = c(1, 0.5, 0.25, 0.25), student = FALSE, sinus = FALSE) {
-  json = paste0(path, '.json')
-  if (file.exists(json)) {
-    # Load the file
-    evaluation = list.load(json)
-    print("File loaded successfully.")
-    print(paste("Already", evaluation$start, "simulations done."))
-  } else {
-    # Initialise evaluation
-    evaluation = list(start = 1)
-    for (name in names(formulas)) {
-      evaluation[[name]] = list()
+  for (i in 1:n_sim) {
+    folder_i <- paste0(path, i, '/')
+    if (!dir.exists(folder_i)) {
+      # Create folder for simulation
+      dir.create(folder_i, recursive = TRUE)
     }
-    print("File does not exist.")
-  }  
-  if (evaluation$start > n_sim) {
-    return()
-  }
-  for (i in evaluation$start:n_sim) {
+
     # Fix seed
     set.seed(i)
 
@@ -50,13 +38,18 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
 
     # Fit models
     for (method in names(formulas)) {
-      fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
-      evaluation[[method]] <- append(evaluation[[method]], evaluate(fit, data, columns, beta, tau, sds, corr, random_effects, last_time_indices))
+      # Run if file does not exist
+      if (!file.exists(paste0(folder_i, method, '.rds'))) {
+        fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 10, iter = 20, chains = 1, cores = 4)
+        # Save model
+        saveRDS(fit, file = paste0(folder_i, method, '.rds'))
+
+        # Extract all columns of interest and save
+        write.csv(posterior_summary(fit), paste0(folder_i, method, '.csv'), row.names = TRUE) 
+      } else {
+        print(paste0('Skipping ', folder_i, method))
+      }
     }
-    # Save
-    evaluation$start = evaluation$start + 1
-    list.save(evaluation, file = json)
-    list.save(summarise_perf(evaluation), file = paste0(path, '_summary.json'))
   }
 }
 
@@ -78,7 +71,7 @@ n_individuals <- 200
 n_points <- 15
 
 ## Simulation
-n_sim <- 100
+n_sim <- 2
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args)==0) {
@@ -109,7 +102,7 @@ if ((run == -1)|(run == 1)) {
   n_individuals_list <- c(100, 300, 500, 1000)
   for (n_individuals_exp in n_individuals_list) {
     print(paste("Simulating for", n_individuals_exp, "individuals"))
-    path = paste0("results/individuals", n_individuals_exp)
+    path = paste0("results/Individuals/", n_individuals_exp, '/')
     simulation(path, formulas, n_sim, n_individuals_exp, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov)
   }
 }
@@ -119,7 +112,7 @@ if ((run == -1)|(run == 2)) {
   n_points_list <- c(5, 10, 20)
   for (n_points_exp in n_points_list) {
     print(paste("Simulating for", n_points_exp, "points"))
-    path = paste0("results/points", n_points_exp)
+    path = paste0("results/Points/", n_points_exp, '/')
     simulation(path, formulas, n_sim, n_individuals, n_points_exp, corr, columns, beta, tau, covariate_mean, covariate_cov)
   }
 }
@@ -166,14 +159,14 @@ formulas = list(
 
 if ((run == -1)|(run == 3)) {
   print("Simulating when no correlation")
-  path = "results/nocorr"
+  path = "results/Uncorrelated Data/"
   identity = diag(4)
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, identity)
 }
 
 if ((run == -1)|(run == 4)) {
   print("Simulating for MELSM misspecification")
-  path = "results/misspecification"
+  path = "results/Misspecification/"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov)
 }
 
@@ -199,7 +192,7 @@ formulas = list(
 
 if ((run == -1)|(run == 5)) {
   print("Simulating for time dependent random effects")
-  path = "results/time"
+  path = "results/Time/"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, time_slope = TRUE)
 }
 
@@ -220,7 +213,7 @@ formulas = list(
 
 if ((run == -1)|(run == 6)) {
   print("Simulating for time dependent random effects")
-  path = "results/random_effects"
+  path = "results/Random effect/"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, student = TRUE)
 }
 
@@ -243,7 +236,7 @@ if ((run == -1)|(run == 7)) {
   n_corr_list <- c(0.5, 0.9)
   for (n_corr_exp in n_corr_list) {
     print("Simulating for correlated random effects")
-    path = paste0("results/corr_random_effects", n_corr_exp)
+    path = paste0("results/Correlated Random Effect/", n_corr_exp, '/')
     simulation(path, formulas, n_sim, n_individuals, n_points, n_corr_exp, columns, beta, tau, covariate_mean, covariate_cov)
   }
 }
@@ -265,6 +258,6 @@ formulas = list(
 
 if ((run == -1)|(run == 8)) {
   print("Simulating for sinus age")
-  path = "results/sinus"
+  path = "results/Sinus/"
   simulation(path, formulas, n_sim, n_individuals, n_points, corr, columns, beta, tau, covariate_mean, covariate_cov, sinus = TRUE)
 }
