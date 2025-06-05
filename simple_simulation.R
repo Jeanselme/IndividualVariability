@@ -40,7 +40,7 @@ simulation <- function(path, formulas, n_sim, n_individuals, n_points, corr, col
     for (method in names(formulas)) {
       # Run if file does not exist
       if (!file.exists(paste0(folder_i, method, '.rds'))) {
-        fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 10, iter = 20, chains = 1, cores = 4)
+        fit <- brm(formulas[[method]], data[!last_time_indices,], seed = i, warmup = 1000, iter = 2000, chains = 4, cores = 4)
         # Save model
         saveRDS(fit, file = paste0(folder_i, method, '.rds'))
 
@@ -71,7 +71,7 @@ n_individuals <- 200
 n_points <- 15
 
 ## Simulation
-n_sim <- 2
+n_sim <- 500
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args)==0) {
