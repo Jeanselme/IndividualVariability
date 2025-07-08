@@ -1,0 +1,166 @@
+---
+title: "PBC analysis"
+author: "Vincent Jeanselme, Marco Palma, Jessica Barrett"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    page-layout: full
+    code-fold: false
+    toc: true
+    toc-depth: 2
+    number-sections: false
+    code-copy: true
+editor: visual
+engine: knitr
+---
+
+## Packages
+
+```{r}
+#| label: packages
+
+library(brms)
+library(MASS)
+library(matrixStats)
+library(rstan)
+library(rlist)
+library(JMbayes2)  ###we take the dataset from this package
+library(dplyr)
+library(ggplot2)
+library(mvnfast)
+library(finalfit)
+library(tidyr)
+```
+
+## PBC dataset
+
+Let us clarify that we are using the pbc data from the `JMbayes2` package (we cannot use the one from `survival` as it contains only one row per subject.
+
+```{r}
+#| label: pbc_exploratory
+
+pbc2 %>% missing_pattern()
+```
+
+I would focus on bilirubin OR albumin (the following code shows the example for bilirubin, but if you replace log_bili with albumin or log_albumin it is the same). You do not need to filter at this stage, as brms will remove the rows with missing data anyway.
+
+```{r}
+#| label: pbc_clean
+
+pbc_clean <- JMbayes2::pbc2 %>%
+  mutate(
+    logserBilir = log(serBilir),  # log-transform bilirubin due to skewness
+  )
+```
+
+```{r}
+#| label: pbc_plots
+
+ggplot(pbc_clean, aes(x = logserBilir)) + 
+  geom_histogram(bins = 30) + 
+  theme_minimal()
+
+
+ggplot(aes(x = year, y = logserBilir, group = id, color = status), data = pbc2) +
+    geom_point(alpha = 0.1) +
+    geom_line(alpha = 0.1) +
+    geom_smooth(aes(x = year, y = logserBilir, group = status))
+
+```
+
+## Models
+
+### LMM
+
+```{r}
+#| label: LMM
+serBilir_LMM <- brm(bf(logserBilir ~ age + sex + s(year) + (1|id), 
+                        sigma ~ 1,
+                        family = gaussian()), 
+                     data = pbc_clean,
+                     warmup = 1000,
+                     iter = 2000,
+                     thin = 1,
+                     chains = 2, cores = 2, 
+                     control = list(adapt_delta = 0.95))
+
+
+summary(serBilir_LMM)
+pp_check(serBilir_LMM) + theme(legend.position = "bottom")
+```
+
+### MELSM
+
+```{r}
+#| label: melsm
+serBilir_melsm <- brm(bf(logserBilir ~ age + sex + s(year) + (1|id), 
+                        sigma ~ age + sex + s(year) + (1|id), 
+                        family = gaussian()), 
+                     data = pbc_clean,
+                     warmup = 1000,
+                     iter = 2000,
+                     thin = 1,
+                     chains = 2, cores = 2, 
+                     control = list(adapt_delta = 0.95))
+
+
+summary(serBilir_melsm)
+pp_check(serBilir_melsm) + theme(legend.position = "bottom")
+```
+
+### Visualization
+
+#### Compare fixed effects
+```{r}
+samples1 <- as_draws_df(serBilir_LMM) %>% select(b_age, b_sexfemale) %>% mutate(model = "LMM")
+samples2 <- as_draws_df(serBilir_melsm) %>% select(b_age, b_sexfemale) %>% mutate(model = "MELSM")
+
+# Combine samples into one data frame
+combined_samples <- bind_rows(samples1, samples2)
+
+# Convert to long format for ggplot2
+combined_long <- combined_samples %>%
+  pivot_longer(cols = c(b_age, b_sexfemale), names_to = "parameter", values_to = "value") %>%
+  mutate(
+    parameter = str_remove(parameter, "^b_"),        # remove 'b_'
+    parameter = str_remove(parameter, "female$"),    # remove 'female' suffix
+  )
+
+# Plot horizontal boxplots grouped by parameter and model
+compare <- ggplot(combined_long, aes(x = value, y = parameter, fill = model)) +
+  geom_boxplot(position = position_dodge(width = 0.8)) +
+  theme_minimal() +
+  labs(
+       x = "Parameter value",
+       y = "Parameter", color = "Model", fill = "Model") + theme_minimal(base_size = 30)
+
+ggsave("fixed.png", plot = compare, width = 8, height = 6, units = "in")
+```
+
+#### Compare smooth effect
+
+```{r}
+# Compute smooth estimates for each model
+smoothlmm <- as.data.frame(conditional_smooths(serBilir_LMM, surface = FALSE)['mu: s(year)'])%>%
+  mutate(model = "LMM")
+smoothmelsm <- as.data.frame(conditional_smooths(serBilir_melsm, surface = FALSE)['mu: s(year)'])%>%
+  mutate(model = "MELSM")
+
+# Combine for plotting
+combined_df <- bind_rows(smoothlmm, smoothmelsm)
+
+# Plot
+time <- ggplot(combined_df, aes(x = mu..s.year..year, y = mu..s.year..estimate__ , color = model, fill = model)) +
+  geom_line(size = 3) +
+  geom_ribbon(aes(ymin = mu..s.year..lower__, ymax = mu..s.year..upper__), alpha = 0.2, color = NA) +
+  labs(x = "Year", y = "Estimated smooth effect",
+       color = "Model", fill = "Model") + theme_minimal(base_size = 30)
+
+ggsave("time.png", plot = time, width = 8, height = 6, units = "in")
+```
+
+## Session info
+
+```{r sessioninfo}
+sessionInfo()
+```
