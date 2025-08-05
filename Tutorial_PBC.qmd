@@ -30,6 +30,7 @@ library(ggplot2)
 library(mvnfast)
 library(finalfit)
 library(tidyr)
+library(stringr)
 ```
 
 ## PBC dataset
@@ -42,14 +43,13 @@ Let us clarify that we are using the pbc data from the `JMbayes2` package (we ca
 pbc2 %>% missing_pattern()
 ```
 
-I would focus on bilirubin OR albumin (the following code shows the example for bilirubin, but if you replace log_bili with albumin or log_albumin it is the same). You do not need to filter at this stage, as brms will remove the rows with missing data anyway.
-
 ```{r}
 #| label: pbc_clean
 
 pbc_clean <- JMbayes2::pbc2 %>%
   mutate(
     logserBilir = log(serBilir),  # log-transform bilirubin due to skewness
+    logalbumin = log(serBilir),
   )
 ```
 
@@ -68,13 +68,28 @@ ggplot(aes(x = year, y = logserBilir, group = id, color = status), data = pbc2) 
 
 ```
 
+```{r}
+# Extract baseline characteristics
+baseline_vars <- pbc_clean %>%
+  group_by(id) %>%
+  arrange(year, .by_group = TRUE) %>%
+  slice(1) %>%
+  select(id,
+         baseline_plat = platelets,
+         baseline_alb  = albumin)
+
+# Merge back into full dataset
+pbc_clean <- pbc_clean %>%
+  left_join(baseline_vars, by = "id")
+```
+
 ## Models
 
 ### LMM
 
 ```{r}
 #| label: LMM
-serBilir_LMM <- brm(bf(logserBilir ~ age + sex + s(year) + (1|id), 
+serBilir_LMM <- brm(bf(logserBilir ~ age + sex + s(year) + baseline_plat + baseline_alb + (1|id), 
                         sigma ~ 1,
                         family = gaussian()), 
                      data = pbc_clean,
@@ -93,8 +108,8 @@ pp_check(serBilir_LMM) + theme(legend.position = "bottom")
 
 ```{r}
 #| label: melsm
-serBilir_melsm <- brm(bf(logserBilir ~ age + sex + s(year) + (1|id), 
-                        sigma ~ age + sex + s(year) + (1|id), 
+serBilir_melsm <- brm(bf(logserBilir ~ age + sex + s(year) + baseline_plat + baseline_alb + (1|id), 
+                        sigma ~ age + sex + s(year) + baseline_plat + baseline_alb + (1|id), 
                         family = gaussian()), 
                      data = pbc_clean,
                      warmup = 1000,
@@ -108,22 +123,64 @@ summary(serBilir_melsm)
 pp_check(serBilir_melsm) + theme(legend.position = "bottom")
 ```
 
+MELSM with location slope
+
+```{r}
+#| label: melsm_slope_location
+serBilir_melsm_slope_location <- brm(bf(logserBilir ~ age + sex + s(year) + baseline_plat + baseline_alb + (1 + age|id), 
+                        sigma ~ age + sex + s(year) + baseline_plat + baseline_alb + (1|id), 
+                        family = gaussian()), 
+                     data = pbc_clean,
+                     warmup = 1000,
+                     iter = 2000,
+                     thin = 1,
+                     chains = 2, cores = 2, 
+                     control = list(adapt_delta = 0.95))
+
+
+summary(serBilir_melsm_slope_location)
+pp_check(serBilir_melsm_slope_location) + theme(legend.position = "bottom")
+```
+
+MELSM with slopes
+
+```{r}
+#| label: melsm_slope
+serBilir_melsm_slope <- brm(bf(logserBilir ~ age + sex + s(year) + baseline_plat + baseline_alb + (1 + age|id), 
+                        sigma ~ age + sex + s(year) + baseline_plat + baseline_alb + (1 + age|id), 
+                        family = gaussian()), 
+                     data = pbc_clean,
+                     warmup = 1000,
+                     iter = 2000,
+                     thin = 1,
+                     chains = 2, cores = 2, 
+                     control = list(adapt_delta = 0.95))
+
+
+summary(serBilir_melsm_slope)
+pp_check(serBilir_melsm_slope) + theme(legend.position = "bottom")
+```
+
 ### Visualization
 
 #### Compare fixed effects
+
 ```{r}
-samples1 <- as_draws_df(serBilir_LMM) %>% select(b_age, b_sexfemale) %>% mutate(model = "LMM")
-samples2 <- as_draws_df(serBilir_melsm) %>% select(b_age, b_sexfemale) %>% mutate(model = "MELSM")
+samples1 <- as_draws_df(serBilir_LMM) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "LMM")
+samples2 <- as_draws_df(serBilir_melsm) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "MELSM No slopes")
+samples3 <- as_draws_df(serBilir_melsm_slope_location) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "MELSM No scale slope")
+samples4 <- as_draws_df(serBilir_melsm_slope) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "MELSM Slopes")
 
 # Combine samples into one data frame
-combined_samples <- bind_rows(samples1, samples2)
+combined_samples <- bind_rows(samples1, samples2, samples3, samples4)
 
 # Convert to long format for ggplot2
 combined_long <- combined_samples %>%
-  pivot_longer(cols = c(b_age, b_sexfemale), names_to = "parameter", values_to = "value") %>%
+  pivot_longer(cols = c(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb), names_to = "parameter", values_to = "value") %>%
   mutate(
-    parameter = str_remove(parameter, "^b_"),        # remove 'b_'
-    parameter = str_remove(parameter, "female$"),    # remove 'female' suffix
+    parameter = str_remove(parameter, "b_baseline_"),
+    parameter = str_remove(parameter, "b_"),        # remove 'b_'
+    parameter = str_remove(parameter, "female"),    # remove 'female' suffix
   )
 
 # Plot horizontal boxplots grouped by parameter and model
@@ -132,9 +189,9 @@ compare <- ggplot(combined_long, aes(x = value, y = parameter, fill = model)) +
   theme_minimal() +
   labs(
        x = "Parameter value",
-       y = "Parameter", color = "Model", fill = "Model") + theme_minimal(base_size = 30)
+       y = "Parameter", color = "Model", fill = "Model") + theme_minimal(base_size = 30) + theme(legend.position="none")
 
-ggsave("fixed.png", plot = compare, width = 8, height = 6, units = "in")
+ggsave("fixed.png", plot = compare, width = 12, height = 6, units = "in")
 ```
 
 #### Compare smooth effect
@@ -144,10 +201,16 @@ ggsave("fixed.png", plot = compare, width = 8, height = 6, units = "in")
 smoothlmm <- as.data.frame(conditional_smooths(serBilir_LMM, surface = FALSE)['mu: s(year)'])%>%
   mutate(model = "LMM")
 smoothmelsm <- as.data.frame(conditional_smooths(serBilir_melsm, surface = FALSE)['mu: s(year)'])%>%
-  mutate(model = "MELSM")
+  mutate(model = "MELSM No slopes")
+smoothmelsmloc <- as.data.frame(conditional_smooths(serBilir_melsm_slope_location, surface = FALSE)['mu: s(year)'])%>%
+  mutate(model = "MELSM No scale slope")
+smoothmelsmslope <- as.data.frame(conditional_smooths(serBilir_melsm_slope, surface = FALSE)['mu: s(year)'])%>%
+  mutate(model = "MELSM Slopes")
+
+
 
 # Combine for plotting
-combined_df <- bind_rows(smoothlmm, smoothmelsm)
+combined_df <- bind_rows(smoothlmm, smoothmelsm, smoothmelsmloc, smoothmelsmslope)
 
 # Plot
 time <- ggplot(combined_df, aes(x = mu..s.year..year, y = mu..s.year..estimate__ , color = model, fill = model)) +
@@ -156,7 +219,7 @@ time <- ggplot(combined_df, aes(x = mu..s.year..year, y = mu..s.year..estimate__
   labs(x = "Year", y = "Estimated smooth effect",
        color = "Model", fill = "Model") + theme_minimal(base_size = 30)
 
-ggsave("time.png", plot = time, width = 8, height = 6, units = "in")
+ggsave("time.png", plot = time, width = 12, height = 6, units = "in")
 ```
 
 ## Session info
