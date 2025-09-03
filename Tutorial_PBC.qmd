@@ -109,6 +109,27 @@ pp_check(serBilir_LMM) + theme(legend.position = "bottom")
 
 ### MELSM
 
+MELSM no covariates in scale
+
+```{r}
+{r}
+#| label: melsm no covariate
+serBilir_melsm_no <- brm(bf(logserBilir ~ age + sex + s(year) + baseline_plat + baseline_alb + (1|id), 
+                        sigma ~ (1|id), 
+                        family = gaussian()), 
+                     data = pbc_clean,
+                     warmup = 1000,
+                     iter = 2000,
+                     seed = 42,
+                     chains = 4, cores = 4)
+
+
+summary(serBilir_melsm_no)
+pp_check(serBilir_melsm_no) + theme(legend.position = "bottom")
+```
+
+MELSM with covariates
+
 ```{r}
 #| label: melsm
 serBilir_melsm <- brm(bf(logserBilir ~ age + sex + s(year) + baseline_plat + baseline_alb + (1|id), 
@@ -163,16 +184,25 @@ pp_check(serBilir_melsm_slope) + theme(legend.position = "bottom")
 
 ### Visualization
 
-#### Compare fixed effects
+#### Compare location
 
 ```{r}
+model_colors <- c(
+  "LMM" = "#E41A1C",                # red
+  "MELSM no slope" = "#377EB8",     # blue
+  "MELSM no slope scale" = "#4DAF4A", # green
+  "MELSM slopes" = "#984EA3",       # purple
+  "MELSM no covariates" = "#FF7F00" # orange
+)
+
 samples1 <- as_draws_df(serBilir_LMM) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "LMM")
 samples2 <- as_draws_df(serBilir_melsm) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "MELSM no slope")
 samples3 <- as_draws_df(serBilir_melsm_slope_location) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "MELSM no slope scale")
 samples4 <- as_draws_df(serBilir_melsm_slope) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "MELSM slopes")
+samples5 <- as_draws_df(serBilir_melsm_no) %>% select(b_age, b_sexfemale, b_baseline_plat, b_baseline_alb) %>% mutate(model = "MELSM no covariates")
 
 # Combine samples into one data frame
-combined_samples <- bind_rows(samples1, samples2, samples3, samples4)
+combined_samples <- bind_rows(samples1, samples2, samples3, samples4, samples5)
 
 
 # Convert to long format for ggplot2
@@ -190,9 +220,105 @@ compare <- ggplot(combined_long, aes(x = value, y = parameter, fill = model)) +
   theme_minimal() +
   labs(
        x = "Parameter value",
-       y = "Parameter", color = "Model", fill = "Model") + theme_minimal(base_size = 30) + theme(legend.position="none")
+       y = "Parameter", color = "Model", fill = "Model") +
+  scale_fill_manual(values = model_colors) +
+  theme_minimal(base_size = 30) +
+  theme(legend.position="none")
 
-ggsave("fixed.png", plot = compare, width = 12, height = 6, units = "in")
+ggsave("fixed.png", plot = compare, width = 8, height = 6, units = "in")
+```
+
+```{r}
+samples2 <- as_draws_df(serBilir_melsm) %>% select(sd_id__Intercept) %>% mutate(model = "MELSM no slope")
+samples3 <- as_draws_df(serBilir_melsm_slope_location) %>% select(sd_id__Intercept) %>% mutate(model = "MELSM no slope scale")
+samples4 <- as_draws_df(serBilir_melsm_slope) %>% select(sd_id__Intercept) %>% mutate(model = "MELSM slopes")
+samples5 <- as_draws_df(serBilir_melsm_no) %>% select(sd_id__Intercept) %>% mutate(model = "MELSM no covariates")
+
+# Combine samples into one data frame
+combined_samples <- bind_rows(samples2, samples3, samples4, samples5)
+
+
+# Convert to long format for ggplot2
+combined_long <- combined_samples %>%
+  pivot_longer(cols = c(sd_id__Intercept), names_to = "parameter", values_to = "value") %>%
+  mutate(parameter = recode(parameter, "sd_id__Intercept" = "Random effect"))
+
+# Plot horizontal boxplots grouped by parameter and model
+compare <- ggplot(combined_long, aes(x = value, y = parameter, fill = model)) +
+  geom_boxplot(position = position_dodge(width = 0.8)) +
+  theme_minimal() +
+  labs(
+       x = "Parameter value",
+       y = "", color = "Model", fill = "Model") +
+  scale_fill_manual(values = model_colors) +
+  theme_minimal(base_size = 30) +
+  theme(legend.position="none") +
+  theme(axis.text.y = element_text(angle = 90, hjust = 0.5))
+
+ggsave("random_effect.png", plot = compare, width = 8, height = 6, units = "in")
+```
+
+#### Compare scale
+
+```{r}
+samples2 <- as_draws_df(serBilir_melsm) %>% select(b_sigma_age, b_sigma_sexfemale, b_sigma_baseline_plat, b_sigma_baseline_alb) %>% mutate(model = "MELSM no slope")
+samples3 <- as_draws_df(serBilir_melsm_slope_location) %>% select(b_sigma_age, b_sigma_sexfemale, b_sigma_baseline_plat, b_sigma_baseline_alb) %>% mutate(model = "MELSM no slope scale")
+samples4 <- as_draws_df(serBilir_melsm_slope) %>% select(b_sigma_age, b_sigma_sexfemale, b_sigma_baseline_plat, b_sigma_baseline_alb) %>% mutate(model = "MELSM slopes")
+
+# Combine samples into one data frame
+combined_samples <- bind_rows(samples2, samples3, samples4)
+
+
+# Convert to long format for ggplot2
+combined_long <- combined_samples %>%
+  pivot_longer(cols = c(b_sigma_age, b_sigma_sexfemale, b_sigma_baseline_plat, b_sigma_baseline_alb), names_to = "parameter", values_to = "value") %>%
+  mutate(
+    parameter = str_remove(parameter, "b_sigma_baseline_"),
+    parameter = str_remove(parameter, "b_sigma_"),        # remove 'b_'
+    parameter = str_remove(parameter, "female"),    # remove 'female' suffix
+  )
+
+# Plot horizontal boxplots grouped by parameter and model
+compare <- ggplot(combined_long, aes(x = value, y = parameter, fill = model)) +
+  geom_boxplot(position = position_dodge(width = 0.8)) +
+  theme_minimal() +
+  labs(
+       x = "Parameter value",
+       y = "Parameter", color = "Model", fill = "Model") +
+  scale_fill_manual(values = model_colors) +
+  theme_minimal(base_size = 30) +
+  theme(legend.position="none")
+
+ggsave("scale.png", plot = compare, width = 8, height = 6, units = "in")
+```
+
+```{r}
+samples2 <- as_draws_df(serBilir_melsm) %>% select(sd_id__sigma_Intercept) %>% mutate(model = "MELSM no slope")
+samples3 <- as_draws_df(serBilir_melsm_slope_location) %>% select(sd_id__sigma_Intercept) %>% mutate(model = "MELSM no slope scale")
+samples4 <- as_draws_df(serBilir_melsm_slope) %>% select(sd_id__sigma_Intercept) %>% mutate(model = "MELSM slopes")
+samples5 <- as_draws_df(serBilir_melsm_no) %>% select(sd_id__sigma_Intercept) %>% mutate(model = "MELSM no covariates")
+
+# Combine samples into one data frame
+combined_samples <- bind_rows(samples2, samples3, samples4, samples5)
+
+
+# Convert to long format for ggplot2
+combined_long <- combined_samples %>%
+  pivot_longer(cols = c(sd_id__sigma_Intercept), names_to = "parameter", values_to = "value") %>%
+  mutate(parameter = recode(parameter, "sd_id__sigma_Intercept" = "Random effect"))
+
+# Plot horizontal boxplots grouped by parameter and model
+compare <- ggplot(combined_long, aes(x = value, y = parameter, fill = model)) +
+  geom_boxplot(position = position_dodge(width = 0.8)) +
+  theme_minimal() +
+  labs(
+       x = "Parameter value",
+       y = "", color = "Model", fill = "Model") +
+  scale_fill_manual(values = model_colors) +
+  theme_minimal(base_size = 30)  +
+  theme(axis.text.y = element_text(angle = 90, hjust = 0.5))
+
+ggsave("random_effect_scale.png", plot = compare, width = 12, height = 6, units = "in")
 ```
 
 #### Compare smooth effect
@@ -208,19 +334,48 @@ smoothmelsmloc <- as.data.frame(conditional_smooths(serBilir_melsm_slope_locatio
   mutate(model = "MELSM no slope scale")
 smoothmelsmslope <- as.data.frame(conditional_smooths(serBilir_melsm_slope, surface = FALSE)['mu: s(year)'])%>%
   mutate(model = "MELSM slopes")
+smoothmelsmno <- as.data.frame(conditional_smooths(serBilir_melsm_no, surface = FALSE)['mu: s(year)'])%>%
+  mutate(model = "MELSM no covariates")
 
 
 
 # Combine for plotting
-combined_df <- bind_rows(smoothlmm, smoothmelsm, smoothmelsmloc, smoothmelsmslope) 
+combined_df <- bind_rows(smoothlmm, smoothmelsm, smoothmelsmloc, smoothmelsmslope, smoothmelsmno) 
 # Plot
 time <- ggplot(combined_df, aes(x = mu..s.year..year, y = mu..s.year..estimate__, color = model, fill = model)) +
   geom_line(size = 3) +
   geom_ribbon(aes(ymin = mu..s.year..lower__, ymax = mu..s.year..upper__), alpha = 0.2) +
-  labs(x = "Year", y = "Estimated smooth effect", color = "Model", fill = "Model") +
+  labs(x = "Year", y = "Estimated time effect", color = "Model", fill = "Model") +
+  scale_fill_manual(values = model_colors) +
+  scale_color_manual(values = model_colors) +
   theme_minimal(base_size = 30)
 
 ggsave("time.png", plot = time, width = 12, height = 6, units = "in")
+```
+
+```{r}
+
+# Compute smooth estimates for each model
+smoothmelsm <- as.data.frame(conditional_smooths(serBilir_melsm, surface = FALSE, dpar = "sigma")['sigma: s(year)'])%>%
+  mutate(model = "MELSM no slope")
+smoothmelsmloc <- as.data.frame(conditional_smooths(serBilir_melsm_slope_location, surface = FALSE, dpar = "sigma")['sigma: s(year)'])%>%
+  mutate(model = "MELSM no slope scale")
+smoothmelsmslope <- as.data.frame(conditional_smooths(serBilir_melsm_slope, surface = FALSE, dpar = "sigma")['sigma: s(year)'])%>%
+  mutate(model = "MELSM slopes")
+
+
+# Combine for plotting
+combined_df <- bind_rows(smoothmelsm, smoothmelsmloc, smoothmelsmslope) 
+# Plot
+time <- ggplot(combined_df, aes(x = sigma..s.year..year, y = sigma..s.year..estimate__, color = model, fill = model)) +
+  geom_line(size = 3) +
+  geom_ribbon(aes(ymin = sigma..s.year..lower__, ymax = sigma..s.year..upper__), alpha = 0.2) +
+  labs(x = "Year", y = "Estimated time effect", color = "Model", fill = "Model") +
+  scale_fill_manual(values = model_colors) +
+  scale_color_manual(values = model_colors) +
+  theme_minimal(base_size = 30)
+
+ggsave("time_scale.png", plot = time, width = 12, height = 6, units = "in")
 ```
 
 ## Session info
