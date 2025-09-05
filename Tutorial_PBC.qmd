@@ -82,6 +82,10 @@ baseline_vars <- pbc_clean %>%
 pbc_clean <- pbc_clean %>%
   left_join(baseline_vars, by = "id")
 
+
+mu_year <- mean(pbc_clean$year, na.rm = TRUE)
+sd_year <- sd(pbc_clean$year, na.rm = TRUE)
+
 # Scale
 pred_cols <- c("age", "year", "baseline_plat", "baseline_alb", "logserBilir", "logalbumin")
 pbc_clean[pred_cols] <- scale(pbc_clean[pred_cols])
@@ -112,7 +116,6 @@ pp_check(serBilir_LMM) + theme(legend.position = "bottom")
 MELSM no covariates in scale
 
 ```{r}
-{r}
 #| label: melsm no covariate
 serBilir_melsm_no <- brm(bf(logserBilir ~ age + sex + s(year) + baseline_plat + baseline_alb + (1|id), 
                         sigma ~ (1|id), 
@@ -248,12 +251,14 @@ compare <- ggplot(combined_long, aes(x = value, y = parameter, fill = model)) +
   geom_boxplot(position = position_dodge(width = 0.8)) +
   theme_minimal() +
   labs(
-       x = "Parameter value",
-       y = "", color = "Model", fill = "Model") +
+       x = expression(sigma[y]),
+       y = NULL, color = "Model", fill = "Model") +
   scale_fill_manual(values = model_colors) +
-  theme_minimal(base_size = 30) +
-  theme(legend.position="none") +
-  theme(axis.text.y = element_text(angle = 90, hjust = 0.5))
+  theme_minimal(base_size = 30)  +
+  theme(
+    axis.text.y = element_blank(),   # remove y tick labels
+    axis.ticks.y = element_blank(),   # remove y tick marks
+    legend.position="none")
 
 ggsave("random_effect.png", plot = compare, width = 8, height = 6, units = "in")
 ```
@@ -312,18 +317,21 @@ compare <- ggplot(combined_long, aes(x = value, y = parameter, fill = model)) +
   geom_boxplot(position = position_dodge(width = 0.8)) +
   theme_minimal() +
   labs(
-       x = "Parameter value",
-       y = "", color = "Model", fill = "Model") +
+       x = expression(sigma[omega]),
+       y = NULL, color = "Model", fill = "Model") +
   scale_fill_manual(values = model_colors) +
   theme_minimal(base_size = 30)  +
-  theme(axis.text.y = element_text(angle = 90, hjust = 0.5))
+  theme(
+    axis.text.y = element_blank(),   # remove y tick labels
+    axis.ticks.y = element_blank()   # remove y tick marks
+  )
 
 ggsave("random_effect_scale.png", plot = compare, width = 12, height = 6, units = "in")
 ```
 
 #### Compare smooth effect
 
-```{r}
+```{ls{r}
 
 # Compute smooth estimates for each model
 smoothlmm <- as.data.frame(conditional_smooths(serBilir_LMM, surface = FALSE)['mu: s(year)'])%>%
@@ -337,10 +345,10 @@ smoothmelsmslope <- as.data.frame(conditional_smooths(serBilir_melsm_slope, surf
 smoothmelsmno <- as.data.frame(conditional_smooths(serBilir_melsm_no, surface = FALSE)['mu: s(year)'])%>%
   mutate(model = "MELSM no covariates")
 
-
-
 # Combine for plotting
-combined_df <- bind_rows(smoothlmm, smoothmelsm, smoothmelsmloc, smoothmelsmslope, smoothmelsmno) 
+combined_df <- bind_rows(smoothlmm, smoothmelsm, smoothmelsmloc, smoothmelsmslope, smoothmelsmno) %>%
+  mutate(mu..s.year..year = mu..s.year..year * sd_year + mu_year)
+
 # Plot
 time <- ggplot(combined_df, aes(x = mu..s.year..year, y = mu..s.year..estimate__, color = model, fill = model)) +
   geom_line(size = 3) +
@@ -365,7 +373,9 @@ smoothmelsmslope <- as.data.frame(conditional_smooths(serBilir_melsm_slope, surf
 
 
 # Combine for plotting
-combined_df <- bind_rows(smoothmelsm, smoothmelsmloc, smoothmelsmslope) 
+combined_df <- bind_rows(smoothmelsm, smoothmelsmloc, smoothmelsmslope) %>%
+  mutate(sigma..s.year..year = sigma..s.year..year * sd_year + mu_year)
+
 # Plot
 time <- ggplot(combined_df, aes(x = sigma..s.year..year, y = sigma..s.year..estimate__, color = model, fill = model)) +
   geom_line(size = 3) +
